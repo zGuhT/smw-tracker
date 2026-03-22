@@ -54,7 +54,7 @@ class HardwareGameState:
 class TrackerConfig:
     progress_threshold: int = 24
     progress_interval_seconds: float = 2.5
-    death_cooldown_seconds: float = 2.0
+    death_cooldown_seconds: float = 0.5
     exit_cooldown_seconds: float = 3.0
     exit_suppress_after_death_seconds: float = 6.0
     armed_delay_seconds: float = 1.0
@@ -211,7 +211,9 @@ class SMWTracker:
         if self.last_state and lives is not None and self.last_state.lives is not None:
             if lives < self.last_state.lives:
                 return True
-        return anim_state == 0x09
+        if anim_state == 0x09:
+            return True
+        return False
 
     # ── State machine ──
 
@@ -563,11 +565,25 @@ class SMWTracker:
             return False
         if not self._is_playable_level_id(state.level_id):
             return False
+
+        # Method 1: Lives counter decreased
         lives_dropped = (state.lives is not None and self.last_state.lives is not None
                          and state.lives < self.last_state.lives)
+
+        # Method 2: Entered death animation (player_anim_state = 0x09)
         entered_death_anim = (state.player_anim_state == 0x09
                               and self.last_state.player_anim_state != 0x09)
-        return ((lives_dropped or entered_death_anim)
+
+        # Method 3: Game mode transition to death sequence (0x12)
+        # This catches deaths in kaizo hacks with 0 lives where the life counter
+        # doesn't change and the animation state might be non-standard.
+        # 0x12 is the "iris out / circle wipe" death transition in SMW.
+        game_mode_death = (state.game_mode == 0x12
+                           and self.last_state.game_mode is not None
+                           and self.last_state.game_mode != 0x12
+                           and self.last_state.game_mode in GAMEPLAY_MODES)
+
+        return ((lives_dropped or entered_death_anim or game_mode_death)
                 and (now - self.last_death_time) >= self.config.death_cooldown_seconds)
 
     # ── Main loop ──

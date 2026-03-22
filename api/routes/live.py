@@ -183,26 +183,43 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
             completed_ids = {s["level_id"] for s in splits}
             enrichment["run_complete"] = all(lid in completed_ids for lid in run_level_ids)
 
-    # Resolve current level name from cloud DB
-    current_level_id = payload.get("current_level_id")
-    if current_level_id and game_name:
-        resolved_name = resolve_level_name(current_level_id, game_name)
-        if resolved_name and resolved_name != current_level_id:
-            enrichment["current_level_name"] = resolved_name
-
-    # Resolve split level names from cloud DB
-    if splits:
-        for s in splits:
-            if s.get("level_id") and game_name:
-                resolved = resolve_level_name(s["level_id"], game_name)
-                if resolved and resolved != s["level_id"]:
-                    s["level_name"] = resolved
-
-    # Cache it (only the enrichment dict, not the mutable splits fix)
+    # Cache it (only run_levels, PB, SOB — NOT current_level_name which changes every push)
     _enrich_cache[cache_key] = enrichment
     _enrich_cache_split_count[cache_key] = split_count
 
     payload.update(enrichment)
+
+    # Resolve current level name AFTER cache (changes every level enter, not just on splits)
+    current_level_id = payload.get("current_level_id")
+    if current_level_id and game_name:
+        # First check run_levels (the authoritative level-to-name mapping from setup)
+        resolved_from_run = None
+        run_levels_list = payload.get("run_levels") or []
+        for rl in run_levels_list:
+            base_rl_id = rl["level_id"].split(":")[0] if ":" in rl["level_id"] else rl["level_id"]
+            if base_rl_id == current_level_id:
+                resolved_from_run = rl["level_name"]
+                break
+        if resolved_from_run:
+            payload["current_level_name"] = resolved_from_run
+        else:
+            resolved_name = resolve_level_name(current_level_id, game_name)
+            if resolved_name and resolved_name != current_level_id:
+                payload["current_level_name"] = resolved_name
+
+    # Resolve split level names (not cached — splits change during a run)
+    splits = payload.get("splits", [])
+    if splits:
+        run_levels_list = payload.get("run_levels") or []
+        rl_lookup = {}
+        for rl in run_levels_list:
+            base_id = rl["level_id"].split(":")[0] if ":" in rl["level_id"] else rl["level_id"]
+            rl_lookup[base_id] = rl["level_name"]
+            rl_lookup[rl["level_id"]] = rl["level_name"]
+        for s in splits:
+            lid = s.get("level_id")
+            if lid and (not s.get("level_name") or s["level_name"] == lid):
+                s["level_name"] = rl_lookup.get(lid) or resolve_level_name(lid, game_name)
 
 
 def _sync_session_to_db(payload: dict, user_id: int) -> None:
