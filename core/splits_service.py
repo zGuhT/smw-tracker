@@ -29,7 +29,7 @@ def record_split(
 
 def get_best_segments(game_name: str) -> list[dict[str, Any]]:
     return db.fetchall(
-        """SELECT level_id, COALESCE(level_name, level_id) AS level_name,
+        """SELECT level_id, COALESCE(MAX(level_name), level_id) AS level_name,
                   MIN(split_ms) AS best_ms, COUNT(*) AS attempt_count,
                   MIN(death_count) AS best_death_count
            FROM level_splits WHERE game_name = ?
@@ -108,7 +108,7 @@ def get_best_segments_for_run(game_name: str, run_level_ids: list[str]) -> list[
         return get_best_segments(game_name)
     in_clause, params = _level_id_filter(run_level_ids)
     return db.fetchall(
-        f"""SELECT level_id, COALESCE(level_name, level_id) AS level_name,
+        f"""SELECT level_id, COALESCE(MAX(level_name), level_id) AS level_name,
                   MIN(split_ms) AS best_ms, COUNT(*) AS attempt_count,
                   MIN(death_count) AS best_death_count
            FROM level_splits WHERE game_name = ? AND {in_clause}
