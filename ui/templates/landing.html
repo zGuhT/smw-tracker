@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker — Real-time SNES Speedrun Tracking</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/" class="active">Home</a>
+        <a href="/download">Download</a>
+        <a href="/auth/page">Sign Up / Log In</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Hero -->
+      <section class="card" style="text-align:center;padding:2.5rem 1.5rem;">
+        <h2 style="color:#6dd5fa;font-size:1.8rem;margin:0 0 0.75rem;">Real-time SNES Speedrun Tracking</h2>
+        <p style="color:#7a8ba0;max-width:520px;margin:0 auto 1.5rem;line-height:1.6;">
+          Connect your SNES hardware via QUsb2Snes, track your splits, deaths, and PBs automatically,
+          and share your runs live with anyone in the world.
+        </p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <a href="/auth/page" style="background:#6dd5fa;color:#0d1117;padding:10px 28px;border-radius:6px;text-decoration:none;font-weight:600;">
+            Create Account
+          </a>
+          <a href="/download" style="background:#2a3544;color:#e2e8f0;padding:10px 28px;border-radius:6px;text-decoration:none;font-weight:600;border:1px solid #3a4a5a;">
+            Download Tracker
+          </a>
+        </div>
+      </section>
+
+      <!-- Live Sessions -->
+      <section class="card">
+        <div class="card-title">Live Now</div>
+        <div id="live-sessions"><p class="muted">Checking for live sessions...</p></div>
+      </section>
+
+      <!-- Global Stats -->
+      <section class="card">
+        <div class="card-title">Community Stats</div>
+        <div id="global-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;">
+          <div class="stat-box"><div class="stat-label">Users</div><div class="stat-value" id="gs-users">—</div></div>
+          <div class="stat-box"><div class="stat-label">Sessions</div><div class="stat-value" id="gs-sessions">—</div></div>
+          <div class="stat-box"><div class="stat-label">Games</div><div class="stat-value" id="gs-games">—</div></div>
+          <div class="stat-box"><div class="stat-label">Total Deaths</div><div class="stat-value deaths-color" id="gs-deaths">—</div></div>
+        </div>
+      </section>
+
+      <!-- User Search -->
+      <section class="card">
+        <div class="card-title">Find a Runner</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="search-input" placeholder="Search by username..." style="flex:1;padding:0.6rem 0.8rem;background:#0d1117;border:1px solid #2a3544;border-radius:6px;color:#e2e8f0;font-size:0.95rem;outline:none;">
+          <button onclick="searchUsers()" style="background:#6dd5fa;color:#0d1117;border:none;border-radius:6px;padding:0.6rem 1.2rem;font-weight:600;cursor:pointer;">Search</button>
+        </div>
+        <div id="search-results"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    // ── Live sessions ──
+    async function loadLiveSessions() {
+      try {
+        const res = await fetch("/live/active");
+        const users = await res.json();
+        const container = $("live-sessions");
+        if (!users.length) {
+          container.innerHTML = '<p class="muted">No one is live right now. Check back later!</p>';
+          return;
+        }
+        container.innerHTML = users.map(u =>
+          `<a href="/live?user=${u.user_id}" class="run-card" style="display:block;margin-bottom:8px;">
+            <strong>${u.game_name || "Playing"}</strong>
+            <span class="status-badge active" style="margin-left:8px">● LIVE</span>
+          </a>`
+        ).join("");
+      } catch { $("live-sessions").innerHTML = '<p class="muted">Could not load live sessions.</p>'; }
+    }
+
+    // ── Global stats ──
+    async function loadGlobalStats() {
+      try {
+        const [users, games, sessions] = await Promise.all([
+          fetch("/users/").then(r => r.json()),
+          fetch("/stats/most-played").then(r => r.json()),
+          fetch("/stats/recent-sessions?limit=1").then(r => r.json()),
+        ]);
+        $("gs-users").textContent = users.length || "0";
+        $("gs-games").textContent = games.length || "0";
+        // Total sessions — get from most-played sum
+        const totalSessions = games.reduce((s, g) => s + (g.session_count || 0), 0);
+        $("gs-sessions").textContent = totalSessions.toLocaleString();
+        // Deaths — quick fetch
+        const deathRes = await fetch("/stats/deaths");
+        const deaths = await deathRes.json();
+        const totalDeaths = deaths.reduce((s, d) => s + (d.death_count || 0), 0);
+        $("gs-deaths").textContent = totalDeaths.toLocaleString();
+      } catch {}
+    }
+
+    // ── User search ──
+    async function searchUsers() {
+      const query = $("search-input").value.trim().toLowerCase();
+      if (!query) return;
+      try {
+        const res = await fetch("/users/");
+        const users = await res.json();
+        const matches = users.filter(u =>
+          u.username.includes(query) || (u.display_name || "").toLowerCase().includes(query)
+        );
+        const container = $("search-results");
+        if (!matches.length) {
+          container.innerHTML = '<p class="muted">No users found.</p>';
+          return;
+        }
+        container.innerHTML = matches.map(u =>
+          `<a href="/u/${u.username}" class="run-card" style="display:block;margin-bottom:8px;">
+            <strong>${u.display_name || u.username}</strong>
+            <span class="muted" style="margin-left:8px">@${u.username}</span>
+          </a>`
+        ).join("");
+      } catch { $("search-results").innerHTML = '<p class="muted">Search failed.</p>'; }
+    }
+
+    // Enter key for search
+    $("search-input").addEventListener("keydown", e => { if (e.key === "Enter") searchUsers(); });
+
+    // Init
+    loadLiveSessions();
+    loadGlobalStats();
+    setInterval(loadLiveSessions, 15000);
+  </script>
+</body>
+</html>

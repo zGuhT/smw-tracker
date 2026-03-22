@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Download — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/download" class="active">Download</a>
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
+        {% else %}
+          <a href="/auth/page">Sign Up / Log In</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    <main>
+      <section class="card" style="max-width:600px;margin:2rem auto;text-align:center;">
+        <h2 style="color:#6dd5fa;margin-bottom:1rem;">Download the Tracker</h2>
+        <p style="color:#7a8ba0;line-height:1.6;margin-bottom:1.5rem;">
+          The SMW Tracker client connects to your SNES hardware via
+          <a href="https://github.com/Skarsnik/QUsb2snes" style="color:#6dd5fa;">QUsb2Snes</a>
+          and automatically tracks your splits, deaths, and progress in real-time.
+        </p>
+
+        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;text-align:left;margin-bottom:1.5rem;">
+          <div style="color:#6dd5fa;font-weight:600;margin-bottom:8px;">Requirements</div>
+          <ul style="color:#7a8ba0;padding-left:1.2rem;line-height:1.8;">
+            <li>Python 3.10+</li>
+            <li>QUsb2Snes connected to your SNES (SD2SNES/FXPak Pro, or emulator)</li>
+            <li>An SMW Tracker account (<a href="/auth/page" style="color:#6dd5fa;">sign up here</a>)</li>
+          </ul>
+        </div>
+
+        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;text-align:left;margin-bottom:1.5rem;">
+          <div style="color:#6dd5fa;font-weight:600;margin-bottom:8px;">Quick Start</div>
+          <pre style="color:#e2e8f0;font-size:0.85rem;overflow-x:auto;line-height:1.6;margin:0;">
+# Clone or download the tracker
+git clone https://github.com/your-repo/sfc-tracker.git
+cd sfc-tracker
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the tracker (use your API key from account settings)
+python run_tracker.py --cloud --api-key YOUR_API_KEY</pre>
+        </div>
+
+        <p style="color:#7a8ba0;font-size:0.85rem;">
+          A standalone desktop client is coming soon. For now, use the Python script above.
+        </p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
