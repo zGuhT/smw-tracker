@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>{{ profile_display_name }} — SMW Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="/static/css/app.css?v=2" rel="stylesheet">
+  <link href="/static/css/app.css?v=3" rel="stylesheet">
 </head>
 <body>
   <div class="page">
@@ -108,10 +108,7 @@
             ? ' <span class="status-badge active">● LIVE</span>'
             : '';
           const gameUrl = `${GAME_URL_PREFIX}${encodeURIComponent(s.game_name)}`;
-          return `<a href="${gameUrl}" class="recent-run-card">
-            <span class="recent-run-left"><strong>${s.game_name}</strong>${status}</span>
-            <span class="recent-run-meta">${formatDate(s.start_time)} &nbsp; ${dur}</span>
-          </a>`;
+          return `<a href="${gameUrl}" class="recent-run-card"><div class="recent-run-inner"><span class="recent-run-left"><strong>${s.game_name}</strong>${status}</span><span class="recent-run-meta">${formatDate(s.start_time)}&nbsp; ${dur}</span></div></a>`;
         }).join("");
       } catch { $("recent-runs").innerHTML = '<p class="muted">Failed to load</p>'; }
     }
