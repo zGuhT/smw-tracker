@@ -118,6 +118,14 @@ def get_current_session_payload(user_id: int | None = None) -> dict[str, Any]:
         (session_id,),
     )
 
+    # Get death events with positions for cloud sync (heatmap data)
+    death_events = db.fetchall(
+        """SELECT level_id, level_name, x_position, event_time
+           FROM game_events WHERE session_id = ? AND event_type = 'death'
+           ORDER BY id""",
+        (session_id,),
+    )
+
     # Current run splits with resolved names
     current_splits = db.fetchall(
         """SELECT level_id, COALESCE(level_name, level_id) AS level_name,
@@ -270,6 +278,7 @@ def get_current_session_payload(user_id: int | None = None) -> dict[str, Any]:
         "current_level_name": current_level_name,
         "current_x_position": latest_progress["x_position"] if latest_progress else None,
         "deaths_this_session": death_count_row["death_count"] if death_count_row else 0,
+        "death_events": [dict(d) for d in death_events],
         "splits": current_splits,
         "run_levels": run_levels,
         "run_name": run_name,

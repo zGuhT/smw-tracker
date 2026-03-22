@@ -293,24 +293,39 @@ def _sync_session_to_db(payload: dict, user_id: int) -> None:
                 )
             db.commit()
 
-    # Sync death count as events (just maintain the count)
-    deaths = payload.get("deaths_this_session", 0)
-    if deaths and session_id:
+    # Sync death events with positions (for heatmap data)
+    death_events = payload.get("death_events", [])
+    deaths_count = payload.get("deaths_this_session", 0)
+    if session_id and (death_events or deaths_count):
         existing_deaths = db.fetchone(
             "SELECT COUNT(*) AS c FROM game_events WHERE session_id = ? AND event_type = 'death'",
             (session_id,),
         )
         current = existing_deaths["c"] if existing_deaths else 0
-        # Add missing death events
-        for _ in range(deaths - current):
-            db.execute(
-                """INSERT INTO game_events (session_id, game_name, event_type, event_time,
-                    level_id, level_name, x_position, details_json, created_at)
-                VALUES (?, ?, 'death', ?, ?, ?, NULL, '{}', ?)""",
-                (session_id, game_name, now,
-                 payload.get("current_level_id"), payload.get("current_level_name"), now),
-            )
-        if deaths > current:
+
+        if death_events and len(death_events) > current:
+            # We have detailed death events — insert the new ones with positions
+            new_events = death_events[current:]
+            for de in new_events:
+                db.execute(
+                    """INSERT INTO game_events (session_id, game_name, event_type, event_time,
+                        level_id, level_name, x_position, details_json, created_at)
+                    VALUES (?, ?, 'death', ?, ?, ?, ?, '{}', ?)""",
+                    (session_id, game_name, de.get("event_time") or now,
+                     de.get("level_id"), de.get("level_name"),
+                     de.get("x_position"), now),
+                )
+            db.commit()
+        elif deaths_count > current:
+            # Fallback: no detailed events, just insert count-based placeholders
+            for _ in range(deaths_count - current):
+                db.execute(
+                    """INSERT INTO game_events (session_id, game_name, event_type, event_time,
+                        level_id, level_name, x_position, details_json, created_at)
+                    VALUES (?, ?, 'death', ?, ?, ?, NULL, '{}', ?)""",
+                    (session_id, game_name, now,
+                     payload.get("current_level_id"), payload.get("current_level_name"), now),
+                )
             db.commit()
 
 
