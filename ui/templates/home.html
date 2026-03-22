@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/" class="active">Home</a>
+        <a href="/stats-page">Stats</a>
+        <a href="/live">Live</a>
+        {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
+      </nav>
+    </header>
+
+    <main>
+      <!-- Now Playing — LiveSplit style -->
+      <section class="card" id="np-card">
+        <div id="np-empty" class="empty-state">
+          <div class="icon">&#127918;</div>
+          <p>No active session — start a game to begin tracking</p>
+        </div>
+
+        <div id="np-content" class="hidden">
+          <!-- Game header -->
+          <div class="ls-header">
+            <img id="np-boxart" class="ls-boxart hidden" alt="">
+            <div class="ls-title-area">
+              <div class="ls-game-name" id="np-game-name">—</div>
+              <div class="ls-category" id="np-platform">—</div>
+            </div>
+            <span class="status-badge active">Live</span>
+          </div>
+
+          <!-- Main timer -->
+          <div class="ls-timer-wrap">
+            <div class="ls-timer" id="np-timer">0:00:00</div>
+            <div class="ls-pace muted" id="np-pace"></div>
+          </div>
+
+          <!-- Splits table -->
+          <div class="ls-splits-wrap">
+            <table class="ls-splits" id="np-splits-table">
+              <thead>
+                <tr>
+                  <th class="ls-col-num">#</th>
+                  <th class="ls-col-name">Split</th>
+                  <th class="ls-col-time">Time</th>
+                  <th class="ls-col-diff">+/−</th>
+                  <th class="ls-col-pb">PB</th>
+                </tr>
+              </thead>
+              <tbody id="np-splits-body"></tbody>
+            </table>
+          </div>
+
+          <!-- Footer stats -->
+          <div class="ls-footer">
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">Deaths</span>
+              <span class="ls-footer-value deaths-color" id="np-deaths">0</span>
+            </div>
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">Current Level</span>
+              <span class="ls-footer-value" id="np-level">—</span>
+            </div>
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">Sum of Best</span>
+              <span class="ls-footer-value" id="np-sob">—</span>
+            </div>
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">PB</span>
+              <span class="ls-footer-value accent-color" id="np-pb">—</span>
+            </div>
+          </div>
+
+          {% if is_local %}
+          <!-- Run Controls -->
+          <div class="run-controls" id="run-controls">
+            <button id="btn-pause" class="rc-btn rc-pause" onclick="togglePause()" title="Start / Pause / Resume">⏸</button>
+            <button id="btn-split" class="rc-btn rc-split" onclick="manualSplit()" title="Manual Split">Split</button>
+            <button id="btn-undo" class="rc-btn rc-undo" onclick="undoSplit()" title="Undo Last Split">Undo</button>
+            <button id="btn-reset" class="rc-btn rc-reset" onclick="resetRun()" title="Reset Run">Reset</button>
+            <button class="rc-btn" onclick="toggleSoundSettings()" title="Sound Settings">🔊</button>
+          </div>
+
+          <!-- Sound Settings (hidden by default) -->
+          <div id="sound-settings" class="sound-settings hidden">
+            <div class="sound-settings-title">Sound Alerts</div>
+            <label class="sound-toggle"><input type="checkbox" id="snd-gold" checked onchange="saveSoundSettings()"> Gold Split ★</label>
+            <label class="sound-toggle"><input type="checkbox" id="snd-ahead" checked onchange="saveSoundSettings()"> Split Ahead of PB</label>
+            <label class="sound-toggle"><input type="checkbox" id="snd-behind" checked onchange="saveSoundSettings()"> Split Behind PB</label>
+            <label class="sound-toggle"><input type="checkbox" id="snd-pb" checked onchange="saveSoundSettings()"> New PB 🎉</label>
+            <label class="sound-toggle"><input type="checkbox" id="snd-complete" checked onchange="saveSoundSettings()"> Run Complete</label>
+            <label class="sound-toggle"><input type="checkbox" id="snd-start" onchange="saveSoundSettings()"> Run Start</label>
+            <div class="sound-volume">
+              <span class="muted">Volume</span>
+              <input type="range" id="snd-volume" min="0" max="100" value="50" onchange="saveSoundSettings()">
+            </div>
+            <button class="btn-sm" onclick="testSound('gold')">Test Gold</button>
+            <button class="btn-sm" onclick="testSound('ahead')">Test Ahead</button>
+            <button class="btn-sm" onclick="testSound('behind')">Test Behind</button>
+            <button class="btn-sm" onclick="testSound('pb')">Test PB</button>
+          </div>
+
+          <!-- Keyboard Shortcuts Reference -->
+          <div id="shortcut-help" class="sound-settings hidden">
+            <div class="sound-settings-title">Keyboard Shortcuts</div>
+            <span class="muted" style="font-size:12px">
+              <kbd>Space</kbd> / <kbd>Num1</kbd> Split &nbsp;
+              <kbd>Z</kbd> / <kbd>Num2</kbd> Undo &nbsp;
+              <kbd>P</kbd> / <kbd>Num3</kbd> Pause &nbsp;
+              <kbd>Num4</kbd> Reset
+            </span>
+          </div>
+          {% endif %}
+        </div>
+      </section>
+
+      <!-- Games Library -->
+      <section class="card">
+        <div class="card-title">Games Library</div>
+        <div id="games-list" class="games-grid">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/js/sounds.js"></script>
+  <script src="/static/js/home.js"></script>
+</body>
+</html>

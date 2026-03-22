@@ -1,0 +1,35 @@
+{
+  "Love Yourself 1.0": {
+    "display_name": "Love Yourself",
+    "source": "manual",
+    "platform_name": "Super Nintendo (SNES)",
+    "external_game_id": null,
+    "boxart_url": null,
+    "screenshot_url": null,
+    "overview": "SMW ROM hack.",
+    "genres_json": ["Platformer", "ROM Hack"],
+    "release_date": null
+  },
+  "Super Moo World": {
+    "display_name": "Super Moo World",
+    "source": "manual",
+    "platform_name": "Super Nintendo (SNES)",
+    "external_game_id": null,
+    "boxart_url": null,
+    "screenshot_url": null,
+    "overview": "SMW ROM hack.",
+    "genres_json": ["Platformer", "ROM Hack"],
+    "release_date": null
+  },
+  "Sweet Shell": {
+    "display_name": "Sweet Shell",
+    "source": "manual",
+    "platform_name": "Super Nintendo (SNES)",
+    "external_game_id": null,
+    "boxart_url": null,
+    "screenshot_url": null,
+    "overview": "SMW ROM hack.",
+    "genres_json": ["Platformer", "ROM Hack"],
+    "release_date": null
+  }
+}

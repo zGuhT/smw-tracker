@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker — Game Details</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/stats-page">Stats</a>
+        <a href="/live">Live</a>
+        {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
+        {% if is_local %}<a href="/game/{{ game_name }}/setup">Setup</a>{% endif %}
+      </nav>
+    </header>
+
+    <main>
+      <!-- Header -->
+      <section class="card">
+        <div class="game-detail-header">
+          <img id="gd-boxart" class="gd-boxart hidden" alt="">
+          <div class="gd-info">
+            <div class="gd-title" id="gd-title">Loading...</div>
+            <div class="gd-platform" id="gd-platform">—</div>
+            <div class="gd-meta-row" id="gd-tags"></div>
+          </div>
+        </div>
+        <div id="gd-overview-wrap" class="hidden">
+          <div class="np-overview" id="gd-overview"></div>
+        </div>
+      </section>
+
+      <!-- General Stats (all runs) -->
+      <section class="card">
+        <div class="card-title">Overall Stats</div>
+        <div class="np-grid">
+          <div class="np-item"><div class="label">Total Playtime</div><div class="value big" id="gd-playtime">—</div></div>
+          <div class="np-item"><div class="label">Sessions</div><div class="value" id="gd-sessions">0</div></div>
+          <div class="np-item deaths"><div class="label">Total Deaths</div><div class="value" id="gd-deaths">0</div></div>
+          <div class="np-item"><div class="label">Levels Cleared</div><div class="value" id="gd-exits">0</div></div>
+        </div>
+      </section>
+
+      <!-- Run-Specific Stats -->
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:0">Run Stats</div>
+          <select id="gd-run-select" class="compare-select" style="max-width:220px" onchange="switchRun()"></select>
+        </div>
+        <div class="np-grid">
+          <div class="np-item"><div class="label">Personal Best</div><div class="value accent-color" id="gd-pb-time">—</div></div>
+          <div class="np-item"><div class="label">Sum of Best</div><div class="value gold" id="gd-sob-time">—</div></div>
+          <div class="np-item"><div class="label">Run Attempts</div><div class="value" id="gd-attempts">0</div></div>
+          <div class="np-item"><div class="label">Possible Save</div><div class="value" id="gd-possible-save">—</div></div>
+        </div>
+      </section>
+
+      <!-- Splits (run-specific) -->
+      <section class="card">
+        <div class="card-title">Splits</div>
+        <div id="gd-splits-table"><p class="muted">Loading...</p></div>
+      </section>
+
+      <!-- PB Progression (run-specific) -->
+      <section class="card" id="pb-progression-section">
+        <div class="card-title">PB Progression</div>
+        <canvas id="chart-pb-progression"></canvas>
+        <p id="no-pb-prog" class="muted text-sm hidden">Need at least 2 completed runs to show progression.</p>
+      </section>
+
+      <!-- Run Comparison (run-specific) -->
+      <section class="card">
+        <div class="card-title">Compare Runs</div>
+        <div class="compare-controls" id="compare-controls">
+          <p class="muted">Loading...</p>
+        </div>
+        <div id="compare-result"></div>
+      </section>
+
+      <!-- Death Heatmap (all runs) -->
+      <section class="card">
+        <div class="card-title">Death Heatmap</div>
+        <div id="death-heatmap-wrap"><p class="muted">Loading...</p></div>
+      </section>
+
+      <!-- Charts (all runs) -->
+      <div class="stats-grid-2">
+        <section class="card">
+          <div class="card-title">Deaths by Level</div>
+          <canvas id="chart-game-deaths"></canvas>
+          <p id="no-deaths" class="muted text-sm hidden">No deaths recorded yet.</p>
+        </section>
+        <section class="card">
+          <div class="card-title">Playtime Trend</div>
+          <canvas id="chart-game-playtime"></canvas>
+          <p id="no-playtime" class="muted text-sm hidden">Not enough data yet.</p>
+        </section>
+      </div>
+
+      <!-- Run History (run-specific) -->
+      <section class="card">
+        <div class="card-title">Run History</div>
+        <div id="gd-run-history"><p class="muted">Loading...</p></div>
+      </section>
+
+      <!-- Session History (all runs) -->
+      <section class="card">
+        <div class="card-title">Session History</div>
+        <div id="gd-sessions-table"><p class="muted">Loading...</p></div>
+      </section>
+    </main>
+  </div>
+
+  <script>window.GAME_NAME = {{ game_name | tojson }};</script>
+  <script src="/static/js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker — Game Setup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/stats-page">Stats</a>
+        {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
+        <a id="back-link" href="/">Back to Game</a>
+      </nav>
+    </header>
+
+    <main>
+      <h2 class="setup-page-title" id="page-title">Game Setup</h2>
+
+      <!-- ═══ EXPORT / IMPORT ═══ -->
+      <section class="card">
+        <div class="card-title">Backup & Restore</div>
+        <div class="setup-add-form">
+          <button onclick="exportConfig()" class="primary">Export Config</button>
+          <label class="btn-sm primary" style="cursor:pointer">
+            Import Config
+            <input type="file" accept=".json" onchange="importConfig(event)" style="display:none">
+          </label>
+        </div>
+        <p class="muted text-sm mt-sm">Export saves your levels and runs as a JSON file. Import restores them after a database reset.</p>
+      </section>
+
+      <!-- ═══ LEVEL EDITOR ═══ -->
+      <section class="card">
+        <div class="card-title">Level Definitions</div>
+        <p class="muted text-sm" style="margin-bottom:16px">
+          Add all levels for this game. Use "Capture from Hardware" while standing in a level on your SNES to auto-fill the level ID.
+        </p>
+
+        <div id="levels-list" class="setup-list"></div>
+
+        <div class="setup-add-form">
+          <input id="new-level-name" type="text" placeholder="Level name" class="setup-input">
+          <input id="new-level-id" type="text" placeholder="Level ID (hex)" class="setup-input setup-input-sm">
+          <label class="setup-checkbox"><input type="checkbox" id="new-level-secret"> Secret exit</label>
+          <button onclick="addLevel()" class="primary">Add Level</button>
+        </div>
+      </section>
+
+      <!-- ═══ RUN EDITOR ═══ -->
+      <section class="card">
+        <div class="card-title">Run Definitions</div>
+        <p class="muted text-sm" style="margin-bottom:16px">
+          Create run categories (e.g. "100%", "Any%"). Drag levels into the order you'll play them. Set one as default for auto-tracking.
+        </p>
+
+        <div class="setup-add-form" style="margin-bottom:18px">
+          <input id="new-run-name" type="text" placeholder="Run name (e.g. 100%)" class="setup-input">
+          <input id="new-run-delay" type="number" placeholder="Start delay (ms)" class="setup-input setup-input-sm" value="0">
+          <label class="setup-checkbox"><input type="checkbox" id="new-run-default"> Default</label>
+          <button onclick="addRun()" class="primary">Create Run</button>
+        </div>
+
+        <div id="runs-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>window.GAME_NAME = {{ game_name | tojson }};</script>
+  <script src="/static/js/setup.js"></script>
+</body>
+</html>

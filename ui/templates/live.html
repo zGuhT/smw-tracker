@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker — Live</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/stats-page">Stats</a>
+        <a href="/live" class="active">Live</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="card" id="live-card">
+        <div id="live-empty" class="empty-state">
+          <div class="icon">📡</div>
+          <p>No one is playing right now</p>
+        </div>
+
+        <div id="live-content" class="hidden">
+          <div class="ls-header">
+            <div class="ls-title-area">
+              <div class="ls-game-name" id="lv-game">—</div>
+              <div class="ls-category" id="lv-run">—</div>
+            </div>
+            <span class="status-badge active">Live</span>
+          </div>
+
+          <div class="ls-timer-wrap">
+            <div class="ls-timer" id="lv-timer">0:00.00</div>
+            <div class="ls-pace muted" id="lv-pace"></div>
+          </div>
+
+          <div class="ls-splits-wrap">
+            <table class="ls-splits">
+              <thead>
+                <tr>
+                  <th class="ls-col-num">#</th>
+                  <th class="ls-col-name">Split</th>
+                  <th class="ls-col-time">Time</th>
+                  <th class="ls-col-diff">+/−</th>
+                  <th class="ls-col-pb">PB</th>
+                </tr>
+              </thead>
+              <tbody id="lv-splits-body"></tbody>
+            </table>
+          </div>
+
+          <div class="ls-footer">
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">Deaths</span>
+              <span class="ls-footer-value deaths-color" id="lv-deaths">0</span>
+            </div>
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">Level</span>
+              <span class="ls-footer-value" id="lv-level">—</span>
+            </div>
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">SOB</span>
+              <span class="ls-footer-value" id="lv-sob">—</span>
+            </div>
+            <div class="ls-footer-item">
+              <span class="ls-footer-label">PB</span>
+              <span class="ls-footer-value accent-color" id="lv-pb">—</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const WINDOW_SIZE = 7;
+
+    function formatMs(ms) {
+      if (ms == null) return "—";
+      const s = Math.floor(ms / 1000), m = Math.floor(s / 60), sec = s % 60;
+      const frac = Math.floor((ms % 1000) / 10);
+      if (m > 0) return `${m}:${String(sec).padStart(2,"0")}.${String(frac).padStart(2,"0")}`;
+      return `${sec}.${String(frac).padStart(2,"0")}`;
+    }
+    function formatDiff(ms) {
+      if (ms == null) return "";
+      return `${ms >= 0 ? "+" : "\u2212"}${formatMs(Math.abs(ms))}`;
+    }
+
+    let data = null;
+    let serverOffset = 0;
+
+    function render(d) {
+      data = d;
+      if (!d || !d.is_active) {
+        $("live-empty").classList.remove("hidden");
+        $("live-content").classList.add("hidden");
+        return;
+      }
+      $("live-empty").classList.add("hidden");
+      $("live-content").classList.remove("hidden");
+
+      $("lv-game").textContent = d.game_name || "—";
+      $("lv-run").textContent = (d.platform || "SNES") + (d.run_name ? ` — ${d.run_name}` : "");
+      $("lv-deaths").textContent = String(d.deaths_this_session ?? 0);
+      $("lv-level").textContent = d.current_level_name || "—";
+      $("lv-sob").textContent = d.sum_of_best_ms ? formatMs(d.sum_of_best_ms) : "—";
+      $("lv-pb").textContent = d.pb_total_ms ? formatMs(d.pb_total_ms) : "—";
+      if (d.server_time) serverOffset = d.server_time - (Date.now() / 1000);
+
+      renderSplits(d);
+    }
+
+    function renderSplits(d) {
+      const tbody = $("lv-splits-body");
+      const completed = d.splits || [];
+      const runLevels = d.run_levels || [];
+      const pbSplits = d.pb_splits || [];
+      const bestSegs = d.best_segments || {};
+
+      const pbLookup = {};
+      for (const s of pbSplits) pbLookup[s.level_id] = s.split_ms;
+      const completedMap = {};
+      for (const s of completed) completedMap[s.level_id] = s;
+
+      const rows = [];
+      const source = runLevels.length > 0 ? runLevels : completed.map(s => ({level_id: s.level_id, level_name: s.level_name}));
+
+      for (const rl of source) {
+        const done = completedMap[rl.level_id];
+        const pb = pbLookup[rl.level_id] ?? null;
+        const best = bestSegs[rl.level_id] ?? null;
+        if (done) {
+          const diff = pb != null ? done.split_ms - pb : null;
+          const isGold = best != null && done.split_ms <= best;
+          rows.push({name: rl.level_name || rl.level_id, ms: done.split_ms, diff, done: true, isGold});
+        } else {
+          rows.push({name: rl.level_name || rl.level_id, ms: null, diff: null, done: false, isGold: false});
+        }
+      }
+
+      let curIdx = rows.findIndex(r => !r.done);
+      if (curIdx === -1) curIdx = rows.length;
+
+      const total = rows.length;
+      let ws = 0, we = total;
+      if (total > WINDOW_SIZE) {
+        const half = Math.floor(WINDOW_SIZE / 2);
+        ws = Math.max(0, curIdx - half);
+        we = ws + WINDOW_SIZE;
+        if (we > total) { we = total; ws = Math.max(0, we - WINDOW_SIZE); }
+      }
+
+      let html = "";
+      if (ws > 0) html += `<tr class="ls-split-indicator"><td colspan="5">\u25b2 ${ws} more</td></tr>`;
+
+      rows.slice(ws, we).forEach((r, i) => {
+        const gi = ws + i;
+        const isCur = gi === curIdx;
+        const cls = isCur ? "ls-split-row current" : r.done ? "ls-split-row" : "ls-split-row upcoming";
+        const goldCls = r.isGold ? " gold" : "";
+        const diffCls = r.diff == null ? "" : r.diff <= 0 ? (r.isGold ? " gold" : " ahead") : " behind";
+
+        const timeCell = r.done
+          ? `<td class="ls-col-time mono${goldCls}">${formatMs(r.ms)}${r.isGold ? " \u2605" : ""}</td>`
+          : isCur
+            ? `<td class="ls-col-time mono accent" id="lv-cur-time">\u2014</td>`
+            : `<td class="ls-col-time mono muted">\u2014</td>`;
+
+        const diffCell = r.done
+          ? `<td class="ls-col-diff mono ${diffCls}">${r.diff != null ? formatDiff(r.diff) : ""}</td>`
+          : isCur
+            ? `<td class="ls-col-diff mono" id="lv-cur-diff"></td>`
+            : `<td class="ls-col-diff mono"></td>`;
+
+        html += `<tr class="${cls}"><td class="ls-col-num mono">${gi+1}</td><td class="ls-col-name">${r.name}</td>${timeCell}${diffCell}<td class="ls-col-pb mono muted">${r.done && pbLookup[r.level_id] ? formatMs(pbLookup[r.level_id]) : "\u2014"}</td></tr>`;
+      });
+
+      if ((total - we) > 0) html += `<tr class="ls-split-indicator"><td colspan="5">\u25bc ${total - we} more</td></tr>`;
+      tbody.innerHTML = html;
+    }
+
+    function tickTimer() {
+      if (!data || !data.is_active) return;
+      const completed = data.splits || [];
+      const completedMs = completed.reduce((s, x) => s + (x.split_ms || 0), 0);
+      const now = (Date.now() / 1000) + serverOffset;
+      const delay = data.run_delay_ms || 0;
+      const paused = data.is_paused || false;
+      const done = data.run_complete || false;
+      const pbSplits = data.pb_splits || [];
+
+      let curMs = 0, totalMs = 0;
+      if (done) { totalMs = completedMs; }
+      else if (paused && data.paused_at) {
+        if (completed.length > 0 && data.current_split_start) {
+          curMs = Math.max(0, (data.paused_at - data.current_split_start) * 1000);
+          totalMs = completedMs + curMs;
+        } else if (data.run_start_epoch) {
+          totalMs = (data.paused_at - data.run_start_epoch) * 1000 - delay;
+          curMs = Math.max(0, totalMs);
+        }
+      } else if (completed.length > 0 && data.current_split_start) {
+        curMs = Math.max(0, (now - data.current_split_start) * 1000);
+        totalMs = completedMs + curMs;
+      } else if (data.run_start_epoch) {
+        totalMs = (now - data.run_start_epoch) * 1000 - delay;
+        curMs = Math.max(0, totalMs);
+      }
+
+      const active = !!data.run_start_epoch;
+      let pbPartial = 0;
+      for (let i = 0; i < completed.length && i < pbSplits.length; i++) pbPartial += pbSplits[i].split_ms || 0;
+      const compDiff = completed.length > 0 ? completedMs - pbPartial : null;
+      const isAhead = compDiff != null ? compDiff <= 0 : null;
+
+      const timer = $("lv-timer");
+      timer.className = "ls-timer";
+      if (active && totalMs >= 0) {
+        timer.textContent = formatMs(totalMs);
+        if (paused) timer.classList.add("paused");
+        else if (isAhead === true) timer.classList.add("timer-ahead");
+        else if (isAhead === false) timer.classList.add("timer-behind");
+      } else if (active) {
+        timer.textContent = `\u2212${formatMs(Math.abs(totalMs))}`;
+        timer.classList.add("muted");
+      } else {
+        timer.textContent = "0:00.00"; timer.classList.add("muted");
+      }
+
+      const pace = $("lv-pace");
+      if (done) {
+        const ftotal = completedMs;
+        if (data.pb_total_ms && ftotal < data.pb_total_ms) { pace.textContent = `\ud83c\udf89 PB! ${formatDiff(ftotal - data.pb_total_ms)}`; pace.className = "ls-pace ahead"; }
+        else if (data.pb_total_ms) { pace.textContent = `Done: ${formatDiff(ftotal - data.pb_total_ms)}`; pace.className = ftotal <= data.pb_total_ms ? "ls-pace ahead" : "ls-pace behind"; }
+        else { pace.textContent = `Done: ${formatMs(ftotal)}`; pace.className = "ls-pace ahead"; }
+      } else if (paused) { pace.textContent = "\u23f8 Paused"; pace.className = "ls-pace muted"; }
+      else if (compDiff != null) { pace.textContent = formatDiff(compDiff); pace.className = compDiff <= 0 ? "ls-pace ahead" : "ls-pace behind"; }
+      else { pace.textContent = ""; pace.className = "ls-pace muted"; }
+
+      // Live current split time
+      const curTimeEl = $("lv-cur-time");
+      const curPbMs = completed.length < pbSplits.length ? (pbSplits[completed.length].split_ms || 0) : null;
+      if (curTimeEl && active && !done && totalMs >= 0) curTimeEl.textContent = formatMs(curMs);
+      const curDiffEl = $("lv-cur-diff");
+      if (curDiffEl && active && !done && curPbMs != null && totalMs >= 0) {
+        const d = curMs - curPbMs;
+        curDiffEl.textContent = formatDiff(d);
+        curDiffEl.className = `ls-col-diff mono ${d <= 0 ? "ahead" : "behind"}`;
+      }
+    }
+
+    // ── SSE Connection ──
+    function connectSSE() {
+      const source = new EventSource("/live/stream");
+      source.onmessage = (e) => {
+        try { render(JSON.parse(e.data)); } catch {}
+      };
+      source.onerror = () => {
+        source.close();
+        // Reconnect after 3s
+        setTimeout(connectSSE, 3000);
+      };
+    }
+
+    // ── Init ──
+    // Fetch initial state, then connect SSE
+    fetch("/live/state").then(r => r.json()).then(render).catch(() => {});
+    connectSSE();
+    setInterval(tickTimer, 100);
+  </script>
+</body>
+</html>

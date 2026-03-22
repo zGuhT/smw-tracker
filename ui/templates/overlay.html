@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker — OBS Overlay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* URL Params: ?splits=5&width=320&theme=dark|light|minimal|transparent */
+    :root {
+      --bg: transparent;
+      --panel: rgba(18, 23, 28, 0.85);
+      --panel-border: rgba(49, 64, 77, 0.5);
+      --text: #e2e8f0;
+      --muted: #7a8ba0;
+      --accent: #6dd5fa;
+      --success: #4ade80;
+      --danger: #f87171;
+      --gold: #fbbf24;
+      --font: 'Outfit', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      font-family: var(--font);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    .overlay {
+      width: var(--overlay-width, 320px);
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .ov-header {
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    .ov-game { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ov-run { font-size: 11px; color: var(--muted); }
+
+    /* ── Timer ── */
+    .ov-timer-wrap { padding: 10px 12px; text-align: center; }
+    .ov-timer {
+      font-family: var(--mono);
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .ov-timer.ahead { color: var(--success); }
+    .ov-timer.behind { color: var(--danger); }
+    .ov-timer.paused { opacity: 0.5; }
+    .ov-timer.muted { color: var(--muted); }
+
+    .ov-pace {
+      font-size: 12px;
+      margin-top: 3px;
+      font-family: var(--mono);
+    }
+    .ov-pace.ahead { color: var(--success); }
+    .ov-pace.behind { color: var(--danger); }
+    .ov-pace.muted { color: var(--muted); }
+
+    /* ── Splits table ── */
+    .ov-splits { width: 100%; border-collapse: collapse; }
+    .ov-splits td {
+      padding: 4px 8px;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(49, 64, 77, 0.3);
+      font-variant-numeric: tabular-nums;
+    }
+    .ov-splits .col-num { width: 20px; text-align: center; color: var(--muted); font-size: 10px; }
+    .ov-splits .col-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+    .ov-splits .col-time { text-align: right; font-family: var(--mono); font-size: 12px; }
+    .ov-splits .col-diff { text-align: right; font-family: var(--mono); font-size: 11px; min-width: 55px; }
+
+    .ov-splits .current td { background: rgba(109, 213, 250, 0.08); }
+    .ov-splits .upcoming td { opacity: 0.4; }
+    .ov-splits .gold { color: var(--gold); }
+    .ov-splits .ahead { color: var(--success); }
+    .ov-splits .behind { color: var(--danger); }
+
+    /* ── Footer ── */
+    .ov-footer {
+      padding: 6px 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid var(--panel-border);
+    }
+    .ov-footer .val { font-family: var(--mono); font-weight: 700; }
+    .ov-footer .deaths { color: var(--danger); }
+    .ov-footer .sob { color: var(--gold); }
+    .ov-footer .pb { color: var(--accent); }
+
+    /* ── Indicator rows ── */
+    .ov-indicator td { text-align: center; font-size: 10px; color: var(--muted); padding: 2px; }
+
+    /* ── Hidden state ── */
+    .ov-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 13px; }
+    .hidden { display: none; }
+
+    /* ── Theme: light ── */
+    body.theme-light {
+      --panel: rgba(255, 255, 255, 0.9);
+      --panel-border: rgba(200, 210, 220, 0.6);
+      --text: #1a1a2e;
+      --muted: #666;
+    }
+
+    /* ── Theme: minimal ── */
+    body.theme-minimal .ov-header { display: none; }
+    body.theme-minimal .overlay { border: none; border-radius: 0; }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="overlay">
+    <div id="ov-empty" class="ov-empty">Waiting for session...</div>
+
+    <div id="ov-content" class="hidden">
+      <!-- Header -->
+      <div class="ov-header">
+        <div>
+          <div class="ov-game" id="ov-game">—</div>
+          <div class="ov-run" id="ov-run"></div>
+        </div>
+      </div>
+
+      <!-- Timer -->
+      <div class="ov-timer-wrap">
+        <div class="ov-timer" id="ov-timer">0:00.00</div>
+        <div class="ov-pace muted" id="ov-pace"></div>
+      </div>
+
+      <!-- Splits -->
+      <table class="ov-splits">
+        <tbody id="ov-splits-body"></tbody>
+      </table>
+
+      <!-- Footer -->
+      <div class="ov-footer">
+        <span>Deaths: <span class="val deaths" id="ov-deaths">0</span></span>
+        <span>SOB: <span class="val sob" id="ov-sob">—</span></span>
+        <span>PB: <span class="val pb" id="ov-pb">—</span></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Config from URL params ──
+    const params = new URLSearchParams(window.location.search);
+    const MAX_SPLITS = parseInt(params.get("splits")) || 5;
+    const OVERLAY_WIDTH = parseInt(params.get("width")) || 320;
+    const THEME = params.get("theme") || "dark";
+
+    if (THEME !== "dark") document.body.classList.add(`theme-${THEME}`);
+    document.querySelector(".overlay").style.setProperty("--overlay-width", OVERLAY_WIDTH + "px");
+
+    // ── Helpers ──
+    const $ = (id) => document.getElementById(id);
+
+    function formatMs(ms) {
+      if (ms == null) return "—";
+      const s = Math.floor(ms / 1000), m = Math.floor(s / 60), sec = s % 60;
+      const frac = Math.floor((ms % 1000) / 10);
+      if (m > 0) return `${m}:${String(sec).padStart(2,"0")}.${String(frac).padStart(2,"0")}`;
+      return `${sec}.${String(frac).padStart(2,"0")}`;
+    }
+    function formatDiff(ms) {
+      if (ms == null) return "";
+      return `${ms >= 0 ? "+" : "\u2212"}${formatMs(Math.abs(ms))}`;
+    }
+
+    // ── State ──
+    let data = null;
+    let serverOffset = 0;
+
+    // ── Poll ──
+    async function poll() {
+      try {
+        const res = await fetch("/session/current");
+        data = await res.json();
+        if (data.server_time) serverOffset = data.server_time - (Date.now() / 1000);
+        render();
+      } catch {}
+    }
+
+    function render() {
+      if (!data || !data.is_active) {
+        $("ov-empty").classList.remove("hidden");
+        $("ov-content").classList.add("hidden");
+        return;
+      }
+      $("ov-empty").classList.add("hidden");
+      $("ov-content").classList.remove("hidden");
+
+      $("ov-game").textContent = data.game_name || "—";
+      $("ov-run").textContent = data.run_name || "";
+      $("ov-deaths").textContent = String(data.deaths_this_session ?? 0);
+      $("ov-sob").textContent = data.sum_of_best_ms ? formatMs(data.sum_of_best_ms) : "—";
+      $("ov-pb").textContent = data.pb_total_ms ? formatMs(data.pb_total_ms) : "—";
+
+      renderSplits();
+    }
+
+    function renderSplits() {
+      const tbody = $("ov-splits-body");
+      const completed = data.splits || [];
+      const runLevels = data.run_levels || [];
+      const pbSplits = data.pb_splits || [];
+      const bestSegs = data.best_segments || {};
+
+      const pbLookup = {};
+      for (const s of pbSplits) pbLookup[s.level_id] = s.split_ms;
+      const completedMap = {};
+      for (const s of completed) completedMap[s.level_id] = s;
+
+      const rows = [];
+      if (runLevels.length > 0) {
+        for (const rl of runLevels) {
+          const done = completedMap[rl.level_id];
+          const pb = pbLookup[rl.level_id] ?? null;
+          const best = bestSegs[rl.level_id] ?? null;
+          if (done) {
+            const diff = pb != null ? done.split_ms - pb : null;
+            const isGold = best != null && done.split_ms <= best;
+            rows.push({ name: rl.level_name, ms: done.split_ms, diff, pb, done: true, isGold });
+          } else {
+            rows.push({ name: rl.level_name, ms: null, diff: null, pb, done: false, isGold: false });
+          }
+        }
+      } else {
+        for (const s of completed) {
+          const pb = pbLookup[s.level_id] ?? null;
+          const best = bestSegs[s.level_id] ?? null;
+          const diff = pb != null ? s.split_ms - pb : null;
+          const isGold = best != null && s.split_ms <= best;
+          rows.push({ name: s.level_name, ms: s.split_ms, diff, pb, done: true, isGold });
+        }
+      }
+
+      let currentIdx = rows.findIndex(r => !r.done);
+      if (currentIdx === -1) currentIdx = rows.length;
+
+      // Sliding window
+      const total = rows.length;
+      let ws = 0, we = total;
+      if (total > MAX_SPLITS) {
+        const half = Math.floor(MAX_SPLITS / 2);
+        ws = Math.max(0, currentIdx - half);
+        we = ws + MAX_SPLITS;
+        if (we > total) { we = total; ws = Math.max(0, we - MAX_SPLITS); }
+      }
+
+      const visible = rows.slice(ws, we);
+      let html = "";
+
+      if (ws > 0) html += `<tr class="ov-indicator"><td colspan="4">\u25b2 ${ws} more</td></tr>`;
+
+      html += visible.map((r, i) => {
+        const gi = ws + i;
+        const isCur = gi === currentIdx;
+        const cls = isCur ? "current" : r.done ? "" : "upcoming";
+        const goldCls = r.isGold ? " gold" : "";
+        const diffCls = r.diff == null ? "" : r.diff <= 0 ? (r.isGold ? " gold" : " ahead") : " behind";
+
+        let timeCell, diffCell;
+        if (r.done) {
+          timeCell = `<td class="col-time${goldCls}">${formatMs(r.ms)}${r.isGold ? " \u2605" : ""}</td>`;
+          diffCell = `<td class="col-diff${diffCls}">${r.diff != null ? formatDiff(r.diff) : ""}</td>`;
+        } else if (isCur) {
+          timeCell = `<td class="col-time" id="ov-cur-time">\u2014</td>`;
+          diffCell = `<td class="col-diff" id="ov-cur-diff"></td>`;
+        } else {
+          timeCell = `<td class="col-time" style="opacity:0.3">\u2014</td>`;
+          diffCell = `<td class="col-diff"></td>`;
+        }
+
+        return `<tr class="${cls}"><td class="col-num">${gi+1}</td><td class="col-name">${r.name}</td>${timeCell}${diffCell}</tr>`;
+      }).join("");
+
+      if ((total - we) > 0) html += `<tr class="ov-indicator"><td colspan="4">\u25bc ${total - we} more</td></tr>`;
+
+      tbody.innerHTML = html;
+    }
+
+    // ── Live tick (100ms) ──
+    function tick() {
+      if (!data || !data.is_active) return;
+
+      const completed = data.splits || [];
+      const completedMs = completed.reduce((s, x) => s + (x.split_ms || 0), 0);
+      const now = (Date.now() / 1000) + serverOffset;
+      const delay = data.run_delay_ms || 0;
+      const paused = data.is_paused || false;
+      const done = data.run_complete || false;
+      const pbSplits = data.pb_splits || [];
+
+      let curMs = 0, totalMs = 0;
+
+      if (done) {
+        totalMs = completedMs;
+      } else if (paused && data.paused_at) {
+        if (completed.length > 0 && data.current_split_start) {
+          curMs = Math.max(0, (data.paused_at - data.current_split_start) * 1000);
+          totalMs = completedMs + curMs;
+        } else if (data.run_start_epoch) {
+          totalMs = (data.paused_at - data.run_start_epoch) * 1000 - delay;
+          curMs = Math.max(0, totalMs);
+        }
+      } else if (completed.length > 0 && data.current_split_start) {
+        curMs = Math.max(0, (now - data.current_split_start) * 1000);
+        totalMs = completedMs + curMs;
+      } else if (data.run_start_epoch) {
+        totalMs = (now - data.run_start_epoch) * 1000 - delay;
+        curMs = Math.max(0, totalMs);
+      }
+
+      const active = !!data.run_start_epoch;
+
+      // Pace
+      let pbPartial = 0;
+      for (let i = 0; i < completed.length && i < pbSplits.length; i++) pbPartial += pbSplits[i].split_ms || 0;
+      const compDiff = completed.length > 0 ? completedMs - pbPartial : null;
+      const isAhead = compDiff != null ? compDiff <= 0 : null;
+      const curPbMs = completed.length < pbSplits.length ? (pbSplits[completed.length].split_ms || 0) : null;
+
+      // Timer
+      const timer = $("ov-timer");
+      timer.className = "ov-timer";
+      if (active) {
+        if (totalMs < 0) { timer.textContent = `\u2212${formatMs(Math.abs(totalMs))}`; timer.classList.add("muted"); }
+        else {
+          timer.textContent = formatMs(totalMs);
+          if (paused) timer.classList.add("paused");
+          else if (isAhead === true) timer.classList.add("ahead");
+          else if (isAhead === false) timer.classList.add("behind");
+        }
+      } else { timer.textContent = "0:00.00"; timer.classList.add("muted"); }
+
+      // Pace text
+      const pace = $("ov-pace");
+      if (done) {
+        if (data.pb_total_ms && completedMs < data.pb_total_ms) { pace.textContent = `\ud83c\udf89 PB! ${formatDiff(completedMs - data.pb_total_ms)}`; pace.className = "ov-pace ahead"; }
+        else if (data.pb_total_ms) { pace.textContent = `Done: ${formatDiff(completedMs - data.pb_total_ms)}`; pace.className = completedMs <= data.pb_total_ms ? "ov-pace ahead" : "ov-pace behind"; }
+        else { pace.textContent = `Done: ${formatMs(completedMs)}`; pace.className = "ov-pace ahead"; }
+      } else if (paused) { pace.textContent = "\u23f8 Paused"; pace.className = "ov-pace muted"; }
+      else if (compDiff != null) { pace.textContent = formatDiff(compDiff); pace.className = compDiff <= 0 ? "ov-pace ahead" : "ov-pace behind"; }
+      else if (active && totalMs < 0) { pace.textContent = "Starting..."; pace.className = "ov-pace muted"; }
+      else { pace.textContent = ""; pace.className = "ov-pace muted"; }
+
+      // Live split time + diff
+      const curTimeEl = $("ov-cur-time");
+      const curDiffEl = $("ov-cur-diff");
+      if (curTimeEl && active && !done && totalMs >= 0) curTimeEl.textContent = formatMs(curMs);
+      if (curDiffEl && active && !done && curPbMs != null && totalMs >= 0) {
+        const d = curMs - curPbMs;
+        curDiffEl.textContent = formatDiff(d);
+        curDiffEl.className = `col-diff ${d <= 0 ? "ahead" : "behind"}`;
+      }
+    }
+
+    // ── Init ──
+    poll();
+    setInterval(poll, 1000);
+    setInterval(tick, 100);
+  </script>
+</body>
+</html>

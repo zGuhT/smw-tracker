@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SMW Tracker — Stats</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/stats-page" class="active">Stats</a>
+        <a href="/live">Live</a>
+        {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
+      </nav>
+    </header>
+
+    <main class="stats-layout">
+      <div class="stats-grid-2">
+        <section class="card">
+          <div class="card-title">Most Played Games</div>
+          <canvas id="chart-most-played"></canvas>
+        </section>
+
+        <section class="card">
+          <div class="card-title">Deaths by Level</div>
+          <canvas id="chart-deaths"></canvas>
+        </section>
+      </div>
+
+      <div class="stats-grid-2">
+        <section class="card">
+          <div class="card-title">Playtime Trend</div>
+          <canvas id="chart-playtime"></canvas>
+        </section>
+
+        <section class="card">
+          <div class="card-title">Sessions Per Day</div>
+          <canvas id="chart-sessions"></canvas>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="card-title">Recent Sessions</div>
+        <div id="recent-sessions-wrap">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/js/stats.js"></script>
+</body>
+</html>
