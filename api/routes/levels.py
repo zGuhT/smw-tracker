@@ -55,12 +55,9 @@ def delete_level_route(level_db_id: int):
 @router.post("/{level_db_id}/capture")
 def capture_level_id(level_db_id: int):
     """Read current level ID from hardware and assign to this level definition."""
-    # This reads from the tracker's shared state via the API
-    # The tracker exposes the current hardware level_id
     from core.level_service import set_level_id_from_hardware
     from hardware.smw_memory_map import LEVEL_ID
     try:
-        # Try to read from QUsb2Snes directly
         from hardware.qusb_client import QUsb2SnesClient
         from core.smw_levels import normalize_level_id
         qusb = QUsb2SnesClient()
@@ -73,5 +70,7 @@ def capture_level_id(level_db_id: int):
         if not result:
             raise HTTPException(404, "Level not found")
         return {"success": True, "level_id": hw_level_id, "level": result}
-    except RuntimeError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(503, f"Hardware not available: {exc}")

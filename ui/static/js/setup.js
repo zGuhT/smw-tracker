@@ -38,7 +38,7 @@ function renderLevels() {
         ${lv.has_secret_exit ? '<span class="setup-item-badge secret">Secret Exit</span>' : ''}
       </div>
       <div class="setup-item-actions">
-        ${IS_LOCAL ? `<button onclick="captureLevel(${lv.id})" class="btn-sm" title="Read level ID from hardware">Capture</button>` : ''}
+        <button onclick="captureLevel(${lv.id})" class="btn-sm" title="Read level ID from hardware">Capture</button>
         <button onclick="promptEditLevel(${lv.id})" class="btn-sm">Edit</button>
         <button onclick="removeLevel(${lv.id})" class="btn-sm btn-danger">Delete</button>
       </div>
@@ -73,16 +73,28 @@ async function removeLevel(id) {
 async function captureLevel(id) {
   try {
     const res = await fetch(`/levels/${id}/capture`, {method: "POST"});
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = null; }
+
     if (!res.ok) {
-      const err = await res.json();
-      alert(`Capture failed: ${err.detail || "Unknown error"}`);
+      if (data && data.detail) {
+        alert(`Capture failed: ${data.detail}`);
+      } else if (res.status === 403) {
+        alert("Capture is only available when running the tracker locally with QUsb2Snes connected.");
+      } else {
+        alert(`Capture failed (${res.status}): The tracker may not be running locally, or QUsb2Snes is not connected.`);
+      }
       return;
     }
-    const data = await res.json();
-    alert(`Captured level ID: ${data.level_id}`);
-    await loadLevels();
+    if (data && data.level_id) {
+      alert(`Captured level ID: ${data.level_id}`);
+      await loadLevels();
+    } else {
+      alert("Capture returned no level ID. Make sure you're standing in a level.");
+    }
   } catch (e) {
-    alert(`Capture failed: ${e.message}`);
+    alert("Capture failed: Could not reach the server. Make sure you're running the tracker locally with QUsb2Snes connected.");
   }
 }
 
