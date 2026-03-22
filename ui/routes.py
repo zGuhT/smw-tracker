@@ -42,3 +42,35 @@ def overlay_page(request: Request):
 @router.get("/live", response_class=HTMLResponse)
 def live_page(request: Request):
     return templates.TemplateResponse("live.html", _ctx(request))
+
+
+@router.get("/u/{username}", response_class=HTMLResponse)
+def user_profile_page(request: Request, username: str):
+    """Public profile page for a user — shows their games, sessions, and live link."""
+    from core.user_service import get_user_by_username
+    user = get_user_by_username(username)
+    if not user:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    return templates.TemplateResponse("profile.html", _ctx(
+        request,
+        profile_user_id=user["id"],
+        profile_username=user["username"],
+        profile_display_name=user.get("display_name") or user["username"],
+    ))
+
+
+@router.get("/u/{username}/game/{game_name}", response_class=HTMLResponse)
+def user_game_detail_page(request: Request, username: str, game_name: str):
+    """Per-user game detail page."""
+    from core.user_service import get_user_by_username
+    user = get_user_by_username(username)
+    if not user:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    return templates.TemplateResponse("game.html", _ctx(
+        request,
+        game_name=game_name,
+        profile_user_id=user["id"],
+        profile_username=user["username"],
+    ))

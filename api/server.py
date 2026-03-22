@@ -91,6 +91,14 @@ class PublicAccessMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Auto-create default user on first startup
+    try:
+        from core.user_service import get_or_create_default_user
+        user = get_or_create_default_user()
+        import logging
+        logging.getLogger("smw").info("Default user ready: id=%s, username=%s", user["id"], user["username"])
+    except Exception:
+        pass
     yield
     close_thread_connection()
 

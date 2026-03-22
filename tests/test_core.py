@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -19,6 +20,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Force SQLite mode for tests
 os.environ.pop("DATABASE_URL", None)
+
+# ── Use a temporary DB so tests never pollute the real app.db ──
+_test_db_dir = tempfile.mkdtemp(prefix="sfc_test_")
+_test_db_path = Path(_test_db_dir) / "test.db"
+
+import core.db as _db_module
+_db_module.DATA_DIR = Path(_test_db_dir)
+_db_module.DB_PATH = _test_db_path
+# Reset any cached connection from a previous import
+_db_module.close_thread_connection()
 
 
 class TestDbHelpers(unittest.TestCase):
@@ -507,6 +518,48 @@ class TestUserSessionWiring(unittest.TestCase):
         sess_row = db.fetchone("SELECT user_id FROM sessions WHERE id = ?",
                                (result["session_id"],))
         self.assertEqual(sess_row["user_id"], self.user1["id"])
+
+
+class TestStatsUserScoping(unittest.TestCase):
+    """Test that stats queries respect user_id filtering."""
+
+    def setUp(self):
+        from core.db import init_db
+        init_db()
+        from core.user_service import create_user
+        from core.session_service import start_session, stop_active_session
+        import uuid
+        s = uuid.uuid4().hex[:6]
+        self.u1 = create_user(f"stats_u1_{s}")
+        self.u2 = create_user(f"stats_u2_{s}")
+
+        # User 1 plays GameX, User 2 plays GameY
+        start_session("GameX_" + s, user_id=self.u1["id"])
+        stop_active_session(user_id=self.u1["id"])
+        start_session("GameY_" + s, user_id=self.u2["id"])
+        stop_active_session(user_id=self.u2["id"])
+        self._s = s
+
+    def test_most_played_scoped(self):
+        from core.stats_service import get_most_played_games
+        u1_games = get_most_played_games(user_id=self.u1["id"])
+        u1_names = {g["game_name"] for g in u1_games}
+        self.assertIn("GameX_" + self._s, u1_names)
+        self.assertNotIn("GameY_" + self._s, u1_names)
+
+    def test_recent_sessions_scoped(self):
+        from core.stats_service import get_recent_sessions
+        u2_sessions = get_recent_sessions(user_id=self.u2["id"])
+        u2_names = {s["game_name"] for s in u2_sessions}
+        self.assertIn("GameY_" + self._s, u2_names)
+        self.assertNotIn("GameX_" + self._s, u2_names)
+
+    def test_unscoped_sees_all(self):
+        from core.stats_service import get_most_played_games
+        all_games = get_most_played_games(user_id=None)
+        all_names = {g["game_name"] for g in all_games}
+        self.assertIn("GameX_" + self._s, all_names)
+        self.assertIn("GameY_" + self._s, all_names)
 
 
 if __name__ == "__main__":

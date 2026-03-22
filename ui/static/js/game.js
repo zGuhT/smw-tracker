@@ -2,6 +2,12 @@
 
 const $ = (id) => document.getElementById(id);
 const GAME_NAME = window.GAME_NAME;
+const _UID = window.PROFILE_USER_ID;
+const _UNAME = window.PROFILE_USERNAME;
+// Suffix to append to API URLs for user scoping
+const _US = _UID ? `?user_id=${_UID}` : "";
+// Join char: ? if _US is empty, & if _US already has ?
+const _UJ = _US ? "&" : "?";
 
 const C = {
   accent: "#6dd5fa", danger: "#f87171", success: "#4ade80",
@@ -37,7 +43,7 @@ let pbChart = null;
 
 async function loadGameDetail() {
   try {
-    const res = await fetch(`/stats/game/${encodeURIComponent(GAME_NAME)}`);
+    const res = await fetch(`/stats/game/${encodeURIComponent(GAME_NAME)}${_US}`);
     pageData = await res.json();
     renderHeader(pageData.metadata);
     renderOverallStats(pageData.summary);
@@ -78,7 +84,7 @@ async function switchRun() {
 async function loadRunData(runDefId) {
   currentRunDefId = runDefId;
   try {
-    const res = await fetch(`/stats/game/${encodeURIComponent(GAME_NAME)}/run/${runDefId}`);
+    const res = await fetch(`/stats/game/${encodeURIComponent(GAME_NAME)}/run/${runDefId}${_US}`);
     const data = await res.json();
     renderRunStats(data);
     renderSplitsTable(data.splits);
@@ -343,7 +349,7 @@ async function loadComparison() {
   if (!runA || !runB) return;
   if (runA === runB) { $("compare-result").innerHTML = '<p class="muted">Select two different runs.</p>'; return; }
   try {
-    const res = await fetch(`/stats/game/${encodeURIComponent(GAME_NAME)}/compare?run_a=${runA}&run_b=${runB}`);
+    const res = await fetch(`/stats/game/${encodeURIComponent(GAME_NAME)}/compare?run_a=${runA}&run_b=${runB}${_UID ? '&user_id=' + _UID : ''}`);
     renderComparison(await res.json());
   } catch (err) { $("compare-result").innerHTML = '<p class="muted">Failed to load comparison.</p>'; }
 }

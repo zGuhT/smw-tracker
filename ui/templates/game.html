@@ -117,7 +117,11 @@
     </main>
   </div>
 
-  <script>window.GAME_NAME = {{ game_name | tojson }};</script>
-  <script src="/static/js/game.js?v=2"></script>
+  <script>
+    window.GAME_NAME = {{ game_name | tojson }};
+    window.PROFILE_USER_ID = {{ profile_user_id | default("null") | tojson }};
+    window.PROFILE_USERNAME = {{ profile_username | default("null") | tojson }};
+  </script>
+  <script src="/static/js/game.js?v=3"></script>
 </body>
 </html>

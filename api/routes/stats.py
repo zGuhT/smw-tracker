@@ -20,34 +20,40 @@ from core.stats_service import (
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
+def _uid(user_id: int | None) -> int | None:
+    """Normalize user_id: 0 and negative values become None."""
+    return user_id if user_id and user_id > 0 else None
+
+
 @router.get("/most-played")
-def stats_most_played():
-    return get_most_played_games()
+def stats_most_played(user_id: int | None = Query(None)):
+    return get_most_played_games(user_id=_uid(user_id))
 
 
 @router.get("/playtime-trend")
-def stats_playtime_trend():
-    return get_playtime_trend()
+def stats_playtime_trend(user_id: int | None = Query(None)):
+    return get_playtime_trend(user_id=_uid(user_id))
 
 
 @router.get("/sessions-per-day")
-def stats_sessions_per_day():
-    return get_sessions_per_day()
+def stats_sessions_per_day(user_id: int | None = Query(None)):
+    return get_sessions_per_day(user_id=_uid(user_id))
 
 
 @router.get("/deaths")
-def stats_deaths():
-    return get_death_stats()
+def stats_deaths(user_id: int | None = Query(None)):
+    return get_death_stats(user_id=_uid(user_id))
 
 
 @router.get("/recent-sessions")
-def stats_recent_sessions(limit: int = Query(20, ge=1, le=100)):
-    return get_recent_sessions(limit=limit)
+def stats_recent_sessions(limit: int = Query(20, ge=1, le=100),
+                          user_id: int | None = Query(None)):
+    return get_recent_sessions(limit=limit, user_id=_uid(user_id))
 
 
 @router.get("/games")
-def stats_all_games():
-    games = get_most_played_games()
+def stats_all_games(user_id: int | None = Query(None)):
+    games = get_most_played_games(user_id=_uid(user_id))
     result = []
     for game in games:
         game_name = game["game_name"]
@@ -64,19 +70,20 @@ def stats_all_games():
 
 
 @router.get("/game/{game_name}")
-def stats_game_detail(game_name: str):
-    summary = get_game_summary(game_name)
+def stats_game_detail(game_name: str, user_id: int | None = Query(None)):
+    uid = _uid(user_id)
+    summary = get_game_summary(game_name, user_id=uid)
     meta = get_metadata_by_game_name(game_name)
     if not meta:
         meta = fetch_metadata_for_rom(game_name)
-    deaths = get_game_deaths_by_level(game_name)
-    sessions = get_game_sessions(game_name)
-    playtime = get_game_playtime_trend(game_name)
+    deaths = get_game_deaths_by_level(game_name, user_id=uid)
+    sessions = get_game_sessions(game_name, user_id=uid)
+    playtime = get_game_playtime_trend(game_name, user_id=uid)
 
     from core.run_service import get_default_run_for_game, get_runs_for_game
     from core.stats_service import get_death_heatmap, get_run_history
-    death_heatmap = get_death_heatmap(game_name)
-    run_history = get_run_history(game_name)
+    death_heatmap = get_death_heatmap(game_name, user_id=uid)
+    run_history = get_run_history(game_name, user_id=uid)
     all_run_defs = get_runs_for_game(game_name)
     default_run = get_default_run_for_game(game_name)
 
@@ -94,15 +101,15 @@ def stats_game_detail(game_name: str):
 
 
 @router.get("/game/{game_name}/run/{run_def_id}")
-def stats_game_run(game_name: str, run_def_id: int):
-    """Get run-specific stats: splits, PB, SOB, progression, run history for one run definition."""
+def stats_game_run(game_name: str, run_def_id: int, user_id: int | None = Query(None)):
+    """Get run-specific stats."""
+    uid = _uid(user_id)
     from core.stats_service import get_run_history, get_pb_progression
 
     splits = get_game_split_summary(game_name, run_id=run_def_id)
-    run_history = get_run_history(game_name, run_definition_id=run_def_id)
-    pb_progression = get_pb_progression(game_name, run_definition_id=run_def_id)
+    run_history = get_run_history(game_name, run_definition_id=run_def_id, user_id=uid)
+    pb_progression = get_pb_progression(game_name, run_definition_id=run_def_id, user_id=uid)
 
-    # Run-specific attempt count
     attempt_row = db.fetchone(
         "SELECT COUNT(*) AS c FROM sessions WHERE game_name = ? AND run_definition_id = ?",
         (game_name, run_def_id),
@@ -123,7 +130,7 @@ def stats_level_history(game_name: str, level_id: str):
 
 @router.get("/game/{game_name}/compare")
 def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...)):
-    """Compare two runs side by side. run_a and run_b are session IDs."""
+    """Compare two runs side by side."""
     from core.level_names import resolve_level_name
     from core.run_service import get_default_run_for_game
 
@@ -151,7 +158,6 @@ def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...
     a = get_run_splits(run_a)
     b = get_run_splits(run_b)
 
-    # Build best segments for gold detection
     best_segments = {}
     best_rows = db.fetchall(
         "SELECT level_id, MIN(split_ms) AS best_ms FROM level_splits WHERE game_name = ? GROUP BY level_id",
@@ -160,7 +166,6 @@ def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...
     for row in best_rows:
         best_segments[row["level_id"]] = row["best_ms"]
 
-    # Get run level order from default run
     default_run = get_default_run_for_game(game_name)
     level_order = []
     if default_run:
@@ -172,11 +177,9 @@ def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...
             split_key = f"{lid}:secret" if exit_type == "secret" else lid
             level_order.append(split_key)
 
-    # Build comparison rows
     a_lookup = {s["level_id"]: s for s in a["splits"]}
     b_lookup = {s["level_id"]: s for s in b["splits"]}
 
-    # Use run order if available, otherwise union of both runs' levels
     if level_order:
         all_levels = level_order
     else:
@@ -196,22 +199,15 @@ def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...
         a_ms = sa["split_ms"] if sa else None
         b_ms = sb["split_ms"] if sb else None
         best_ms = best_segments.get(lid)
-
-        diff = None
-        if a_ms is not None and b_ms is not None:
-            diff = a_ms - b_ms
-
+        diff = (a_ms - b_ms) if a_ms is not None and b_ms is not None else None
         if a_ms is not None:
             cum_a += a_ms
         if b_ms is not None:
             cum_b += b_ms
-
         comparison.append({
             "level_id": lid,
             "level_name": resolve_level_name(lid, game_name),
-            "a_ms": a_ms,
-            "b_ms": b_ms,
-            "diff_ms": diff,
+            "a_ms": a_ms, "b_ms": b_ms, "diff_ms": diff,
             "a_deaths": sa["death_count"] if sa else None,
             "b_deaths": sb["death_count"] if sb else None,
             "best_ms": best_ms,
@@ -222,8 +218,6 @@ def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...
         })
 
     return {
-        "run_a": a,
-        "run_b": b,
-        "comparison": comparison,
+        "run_a": a, "run_b": b, "comparison": comparison,
         "total_diff_ms": a["total_ms"] - b["total_ms"] if a["total_ms"] and b["total_ms"] else None,
     }

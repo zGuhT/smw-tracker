@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ profile_display_name }} — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/u/{{ profile_username }}" class="active">{{ profile_display_name }}</a>
+        <a href="/live?user={{ profile_user_id }}">Live</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Live Now Banner -->
+      <a href="/live?user={{ profile_user_id }}" id="live-banner" class="live-banner hidden">
+        <div class="live-banner-badge"><span class="status-badge active">Live</span></div>
+        <div class="live-banner-info">
+          <div class="live-banner-game" id="lb-game">—</div>
+          <div class="live-banner-detail" id="lb-detail">Playing now — click to watch</div>
+        </div>
+        <div class="live-banner-arrow">→</div>
+      </a>
+
+      <!-- Recent Runs -->
+      <section class="card">
+        <div class="card-title">Recent Runs</div>
+        <div id="recent-runs"><p class="muted">Loading...</p></div>
+      </section>
+
+      <!-- Games Library -->
+      <section class="card">
+        <div class="card-title">Games Library</div>
+        <div id="games-list" class="games-grid">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // ── Profile config ──
+    const PROFILE_USER_ID = {{ profile_user_id }};
+    const PROFILE_USERNAME = "{{ profile_username }}";
+    const USER_SUFFIX = `?user_id=${PROFILE_USER_ID}`;
+    const GAME_URL_PREFIX = `/u/${PROFILE_USERNAME}/game/`;
+
+    const $ = id => document.getElementById(id);
+
+    function formatHours(seconds) {
+      if (!seconds) return "0m";
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "";
+      const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+      return d.toLocaleDateString(undefined, {year:"numeric",month:"short",day:"numeric"}) +
+        " " + d.toLocaleTimeString(undefined, {hour:"2-digit",minute:"2-digit"});
+    }
+
+    // ── Live banner ──
+    async function pollLiveBanner() {
+      try {
+        const res = await fetch(`/live/state?user=${PROFILE_USER_ID}`);
+        const data = await res.json();
+        const banner = $("live-banner");
+        if (data && data.is_active) {
+          $("lb-game").textContent = data.game_name || "Playing";
+          $("lb-detail").textContent = `${data.current_level_name || ""}  —  watch live`.trim();
+          banner.classList.remove("hidden");
+        } else {
+          banner.classList.add("hidden");
+        }
+      } catch {}
+    }
+
+    // ── Recent Runs ──
+    async function loadRecentRuns() {
+      try {
+        const res = await fetch(`/stats/recent-sessions?limit=10&${USER_SUFFIX.slice(1)}`);
+        const sessions = await res.json();
+        const container = $("recent-runs");
+        if (!sessions.length) {
+          container.innerHTML = '<p class="muted">No sessions yet</p>';
+          return;
+        }
+        container.innerHTML = sessions.map(s => {
+          const dur = formatHours(s.duration_seconds);
+          const status = s.is_active
+            ? '<span class="status-badge active">● LIVE</span>'
+            : '<span class="muted">—</span>';
+          const gameUrl = `${GAME_URL_PREFIX}${encodeURIComponent(s.game_name)}`;
+          return `<a href="${gameUrl}" class="run-card">
+            <div><strong>${s.game_name}</strong></div>
+            <div class="run-meta">${formatDate(s.start_time)} &nbsp; ${dur} &nbsp; ${status}</div>
+          </a>`;
+        }).join("");
+      } catch { $("recent-runs").innerHTML = '<p class="muted">Failed to load</p>'; }
+    }
+
+    // ── Games Library ──
+    async function loadGamesLibrary() {
+      try {
+        const res = await fetch(`/stats/games?${USER_SUFFIX.slice(1)}`);
+        const games = await res.json();
+        const container = $("games-list");
+        if (!games.length) {
+          container.innerHTML = '<p class="muted">No games played yet</p>';
+          return;
+        }
+        container.innerHTML = games.map(g => {
+          const displayName = g.display_name || g.game_name;
+          const gameUrl = `${GAME_URL_PREFIX}${encodeURIComponent(g.game_name)}`;
+          const time = formatHours(g.total_playtime_seconds);
+          const sessions = g.session_count === 1 ? "1 session" : `${g.session_count} sessions`;
+          const img = g.boxart_url
+            ? `<img src="${g.boxart_url}" alt="${displayName}" loading="lazy">`
+            : '<div class="game-card-placeholder">🎮</div>';
+          return `<a href="${gameUrl}" class="game-card">
+            <div class="game-card-img">${img}</div>
+            <div class="game-card-name">${displayName}</div>
+            <div class="game-card-meta">${time} &nbsp; ${sessions}</div>
+          </a>`;
+        }).join("");
+      } catch { $("games-list").innerHTML = '<p class="muted">Failed to load</p>'; }
+    }
+
+    // ── Init ──
+    pollLiveBanner();
+    setInterval(pollLiveBanner, 10000);
+    loadRecentRuns();
+    loadGamesLibrary();
+  </script>
+</body>
+</html>
