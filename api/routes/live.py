@@ -132,9 +132,11 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
     cache_key = f"{game_name}:{user_id or 'global'}"
 
     # Check if we need to refresh the cache
-    if cache_key in _enrich_cache and _enrich_cache_split_count.get(cache_key) == split_count:
-        # Use cached data
-        cached = _enrich_cache[cache_key]
+    cached = _enrich_cache.get(cache_key)
+    cached_split_count = _enrich_cache_split_count.get(cache_key)
+    if (cached is not None
+            and cached_split_count == split_count
+            and cached.get("run_levels")):  # Don't cache empty run_levels
         payload.update(cached)
         return
 
