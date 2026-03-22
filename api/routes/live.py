@@ -378,6 +378,27 @@ async def live_active_users():
     return live_state.get_active_users()
 
 
+@router.get("/debug-enrich/{game_name}")
+async def debug_enrich(game_name: str):
+    """Debug: check what run config the cloud has for a game."""
+    from core.run_service import get_default_run_config, get_default_run_for_game
+    from core import db
+
+    default_run = get_default_run_for_game(game_name)
+    run_config = get_default_run_config(game_name)
+
+    # Also check what game names exist in run_definitions
+    all_runs = db.fetchall("SELECT id, game_name, run_name, is_default FROM run_definitions ORDER BY id")
+
+    return {
+        "game_name_queried": game_name,
+        "default_run": default_run,
+        "run_config_found": run_config is not None,
+        "run_config_levels": len(run_config.get("levels", [])) if run_config else 0,
+        "all_run_definitions": all_runs,
+    }
+
+
 # ── Remote commands (web → local tracker) ──
 
 @router.post("/command/{user_id}")
