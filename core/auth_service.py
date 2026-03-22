@@ -161,6 +161,38 @@ def request_login(email: str) -> dict[str, Any] | None:
     }
 
 
+def resend_verification(email: str) -> dict[str, Any] | None:
+    """Generate a fresh verification token for an unverified account.
+
+    Returns {user_id, username, email, token} or None if not found / already verified.
+    """
+    email = email.strip().lower()
+    user = db.fetchone(
+        "SELECT * FROM users WHERE email = ? AND email_verified = 0",
+        (email,),
+    )
+    if not user:
+        return None
+
+    raw_token = _generate_token()
+    token_hash = _token_hash(raw_token)
+    now = utc_now_iso()
+
+    db.execute(
+        """UPDATE users SET verification_token = ?, verification_expires = ?,
+           updated_at = ? WHERE id = ?""",
+        (token_hash, _expiry(24), now, user["id"]),
+    )
+    db.commit()
+
+    return {
+        "user_id": user["id"],
+        "username": user["username"],
+        "email": user["email"],
+        "token": raw_token,
+    }
+
+
 def generate_session_token(user_id: int) -> str:
     """Generate a web session token (stored as a signed cookie value).
 

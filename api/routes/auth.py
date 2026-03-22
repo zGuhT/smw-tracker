@@ -18,6 +18,7 @@ from core.auth_service import (
     invalidate_session_token,
     register_user,
     request_login,
+    resend_verification,
     verify_token,
 )
 
@@ -88,6 +89,35 @@ async def auth_login(request: Request):
     if is_configured():
         send_login_email(result["email"], result["username"], result["token"])
         return {"ok": True, "message": "Check your email for a login link."}
+    else:
+        return {
+            "ok": True,
+            "message": "SMTP not configured — use link directly.",
+            "dev_verify_url": f"/auth/verify?token={result['token']}",
+        }
+
+
+@router.post("/resend")
+async def auth_resend(request: Request):
+    """Resend verification email for an unverified account."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    email = (body.get("email") or "").strip().lower()
+    if not email:
+        return JSONResponse({"error": "Email is required"}, status_code=400)
+
+    result = resend_verification(email)
+    if not result:
+        # Don't reveal whether the email exists or is already verified
+        return {"ok": True, "message": "If an unverified account exists with that email, a new verification link has been sent."}
+
+    from core.email_service import is_configured, send_verification_email
+    if is_configured():
+        send_verification_email(result["email"], result["username"], result["token"])
+        return {"ok": True, "message": "A new verification link has been sent to your email."}
     else:
         return {
             "ok": True,

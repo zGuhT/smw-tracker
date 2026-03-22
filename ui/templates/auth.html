@@ -51,6 +51,7 @@
         <div class="auth-tabs">
           <div class="auth-tab active" id="tab-register" onclick="showTab('register')">Sign Up</div>
           <div class="auth-tab" id="tab-login" onclick="showTab('login')">Log In</div>
+          <div class="auth-tab" id="tab-resend" onclick="showTab('resend')">Resend</div>
         </div>
 
         <!-- Register form -->
@@ -85,6 +86,19 @@
           <button class="auth-btn" id="btn-login" onclick="doLogin()">Send Login Link</button>
           <div class="auth-msg hidden" id="msg-login"></div>
         </div>
+
+        <!-- Resend verification form -->
+        <div class="auth-form hidden" id="form-resend">
+          <p style="color:#7a8ba0;font-size:0.9rem;margin-bottom:1rem;">
+            Signed up but didn't get the email? Enter your email to get a new verification link.
+          </p>
+          <div class="field">
+            <label for="resend-email">Email</label>
+            <input type="email" id="resend-email" placeholder="you@example.com" autocomplete="email">
+          </div>
+          <button class="auth-btn" id="btn-resend" onclick="doResend()">Resend Verification</button>
+          <div class="auth-msg hidden" id="msg-resend"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -93,10 +107,10 @@
     const $ = id => document.getElementById(id);
 
     function showTab(tab) {
-      $("tab-register").classList.toggle("active", tab === "register");
-      $("tab-login").classList.toggle("active", tab === "login");
-      $("form-register").classList.toggle("hidden", tab !== "register");
-      $("form-login").classList.toggle("hidden", tab !== "login");
+      for (const t of ["register", "login", "resend"]) {
+        $("tab-" + t).classList.toggle("active", t === tab);
+        $("form-" + t).classList.toggle("hidden", t !== tab);
+      }
     }
 
     function showMsg(id, text, ok) {
@@ -127,12 +141,15 @@
         const data = await res.json();
         if (data.ok) {
           showMsg("msg-register", data.message, true);
-          // Dev mode: show direct link
           if (data.dev_verify_url) {
             $("msg-register").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Verify now (dev mode)</a>`;
           }
         } else {
           showMsg("msg-register", data.error || "Registration failed.", false);
+          // If email already exists and unverified, hint to use resend tab
+          if (data.error && data.error.includes("already")) {
+            $("msg-register").innerHTML += `<br><span style="color:#7a8ba0;font-size:0.85rem;">Already signed up? Try the <a href="#" onclick="showTab('resend');return false" style="color:#6dd5fa;">Resend</a> or <a href="#" onclick="showTab('login');return false" style="color:#6dd5fa;">Log In</a> tab.</span>`;
+          }
         }
       } catch {
         showMsg("msg-register", "Network error — try again.", false);
@@ -172,13 +189,47 @@
       btn.disabled = false;
     }
 
+    async function doResend() {
+      const btn = $("btn-resend");
+      btn.disabled = true;
+      const email = $("resend-email").value.trim().toLowerCase();
+
+      if (!email) {
+        showMsg("msg-resend", "Email is required.", false);
+        btn.disabled = false;
+        return;
+      }
+
+      try {
+        const res = await fetch("/auth/resend", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({email}),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showMsg("msg-resend", data.message, true);
+          if (data.dev_verify_url) {
+            $("msg-resend").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Verify now (dev mode)</a>`;
+          }
+        } else {
+          showMsg("msg-resend", data.error || "Failed.", false);
+        }
+      } catch {
+        showMsg("msg-resend", "Network error — try again.", false);
+      }
+      btn.disabled = false;
+    }
+
     // Allow Enter key to submit
     $("reg-email").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
     $("reg-display").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
     $("login-email").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+    $("resend-email").addEventListener("keydown", e => { if (e.key === "Enter") doResend(); });
 
-    // Pre-select login tab if URL has ?login
+    // Pre-select tab from URL
     if (location.search.includes("login")) showTab("login");
+    else if (location.search.includes("resend")) showTab("resend");
   </script>
 </body>
 </html>
