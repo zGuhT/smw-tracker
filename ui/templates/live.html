@@ -12,8 +12,12 @@
       <h1>SMW://TRACKER</h1>
       <nav>
         <a href="/">Home</a>
-        <a href="/stats-page">Stats</a>
-        <a href="/live" class="active">Live</a>
+        <a href="/download">Download</a>
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
+        {% else %}
+          <a href="/auth/page">Sign Up / Log In</a>
+        {% endif %}
       </nav>
     </header>
 

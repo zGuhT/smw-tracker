@@ -76,16 +76,127 @@ def _resolve_user_id(request: Request) -> str:
 
 @router.post("/push")
 async def live_push(request: Request):
-    """Receive full session state from the local tracker."""
+    """Receive full session state from the local tracker and sync to cloud DB."""
     if not _check_api_key(request):
         return JSONResponse({"error": "Invalid API key"}, status_code=401)
     try:
         payload = await request.json()
         user_id = _resolve_user_id(request)
         live_state.update(payload, user_id=user_id)
+
+        # Sync session data to cloud DB
+        if user_id != DEFAULT_USER:
+            try:
+                _sync_session_to_db(payload, int(user_id))
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Session sync failed: %s", exc)
+
         return {"ok": True, "user_id": user_id}
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+def _sync_session_to_db(payload: dict, user_id: int) -> None:
+    """Sync pushed session state to the cloud database.
+
+    Creates or updates the session row and syncs splits.
+    This runs on every push (every 500ms) so it must be fast.
+    """
+    from core import db
+    from core.time_utils import utc_now_iso
+
+    if not payload.get("is_active") or not payload.get("game_name"):
+        # Session ended or no game — ensure any active session for this user is closed
+        active = db.fetchone(
+            "SELECT id FROM sessions WHERE user_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        )
+        if active:
+            now = utc_now_iso()
+            db.execute(
+                "UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE id = ?",
+                (now, now, active["id"]),
+            )
+            db.commit()
+        return
+
+    game_name = payload["game_name"]
+    platform = payload.get("platform", "SNES")
+    start_time = payload.get("start_time")
+    now = utc_now_iso()
+
+    # Find or create session
+    active = db.fetchone(
+        "SELECT id, game_name FROM sessions WHERE user_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1",
+        (user_id,),
+    )
+
+    if active and active["game_name"] == game_name:
+        session_id = active["id"]
+        # Touch the session
+        db.execute("UPDATE sessions SET last_event_time = ?, updated_at = ? WHERE id = ?",
+                   (now, now, session_id))
+    else:
+        # Close old session if different game
+        if active:
+            db.execute(
+                "UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE id = ?",
+                (now, now, active["id"]),
+            )
+
+        # Create new session
+        session_id = db.insert_returning_id(
+            """INSERT INTO sessions (user_id, game_name, platform, start_time, end_time,
+                                    is_active, last_event_time, created_at, updated_at)
+            VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?)""",
+            (user_id, game_name, platform, start_time or now, now, now, now),
+        )
+
+    db.commit()
+
+    # Sync splits — replace all splits for this session with the pushed ones
+    splits = payload.get("splits", [])
+    if splits and session_id:
+        existing_count = db.fetchone(
+            "SELECT COUNT(*) AS c FROM level_splits WHERE session_id = ? AND game_name = ?",
+            (session_id, game_name),
+        )
+        # Only sync if split count changed (avoid redundant writes)
+        if existing_count and existing_count["c"] != len(splits):
+            # Delete old and insert new
+            db.execute("DELETE FROM level_splits WHERE session_id = ? AND game_name = ?",
+                       (session_id, game_name))
+            for s in splits:
+                db.execute(
+                    """INSERT INTO level_splits (session_id, game_name, level_id, level_name,
+                        split_ms, entered_at, exited_at, death_count, best_x, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (session_id, game_name, s.get("level_id"), s.get("level_name"),
+                     s.get("split_ms", 0), s.get("entered_at", 0), s.get("exited_at", 0),
+                     s.get("death_count", 0), s.get("best_x"), now),
+                )
+            db.commit()
+
+    # Sync death count as events (just maintain the count)
+    deaths = payload.get("deaths_this_session", 0)
+    if deaths and session_id:
+        existing_deaths = db.fetchone(
+            "SELECT COUNT(*) AS c FROM game_events WHERE session_id = ? AND event_type = 'death'",
+            (session_id,),
+        )
+        current = existing_deaths["c"] if existing_deaths else 0
+        # Add missing death events
+        for _ in range(deaths - current):
+            db.execute(
+                """INSERT INTO game_events (session_id, game_name, event_type, event_time,
+                    level_id, level_name, x_position, details_json, created_at)
+                VALUES (?, ?, 'death', ?, ?, ?, NULL, '{}', ?)""",
+                (session_id, game_name, now,
+                 payload.get("current_level_id"), payload.get("current_level_name"), now),
+            )
+        if deaths > current:
+            db.commit()
 
 
 @router.get("/state")
