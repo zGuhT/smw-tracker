@@ -19,35 +19,42 @@ from email.mime.text import MIMEText
 
 log = logging.getLogger(__name__)
 
-SMTP_HOST = os.environ.get("SMTP_HOST", "")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
-SMTP_FROM = os.environ.get("SMTP_FROM", "") or SMTP_USER
-BASE_URL = os.environ.get("BASE_URL", "https://smwtracker.com").rstrip("/")
+
+def _cfg():
+    """Read SMTP config from environment at call time (not import time)."""
+    host = os.environ.get("SMTP_HOST", "")
+    user = os.environ.get("SMTP_USER", "")
+    pwd = os.environ.get("SMTP_PASS", "")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    from_addr = os.environ.get("SMTP_FROM", "") or user
+    base_url = os.environ.get("BASE_URL", "https://smwtracker.com").rstrip("/")
+    return host, port, user, pwd, from_addr, base_url
 
 
 def is_configured() -> bool:
     """Check if SMTP is configured."""
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+    host, _, user, pwd, _, _ = _cfg()
+    return bool(host and user and pwd)
 
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
     """Send an HTML email. Returns True on success."""
-    if not is_configured():
-        log.warning("SMTP not configured — cannot send email to %s", to)
+    host, port, user, pwd, from_addr, _ = _cfg()
+    if not (host and user and pwd):
+        log.warning("SMTP not configured — cannot send email to %s (SMTP_HOST=%r, SMTP_USER=%r, SMTP_PASS=%s)",
+                     to, host, user, "set" if pwd else "empty")
         return False
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = SMTP_FROM
+    msg["From"] = from_addr
     msg["To"] = to
     msg["Subject"] = subject
     msg.attach(MIMEText(html_body, "html"))
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        with smtplib.SMTP(host, port, timeout=10) as server:
             server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
+            server.login(user, pwd)
             server.send_message(msg)
         log.info("Email sent to %s: %s", to, subject)
         return True
@@ -58,7 +65,8 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
 
 def send_verification_email(to: str, username: str, token: str) -> bool:
     """Send account verification email with a link."""
-    verify_url = f"{BASE_URL}/auth/verify?token={token}"
+    _, _, _, _, _, base_url = _cfg()
+    verify_url = f"{base_url}/auth/verify?token={token}"
     subject = "SMW Tracker — Verify your account"
     html = f"""
     <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
@@ -84,7 +92,8 @@ def send_verification_email(to: str, username: str, token: str) -> bool:
 
 def send_login_email(to: str, username: str, token: str) -> bool:
     """Send magic login link email."""
-    login_url = f"{BASE_URL}/auth/verify?token={token}"
+    _, _, _, _, _, base_url = _cfg()
+    login_url = f"{base_url}/auth/verify?token={token}"
     subject = "SMW Tracker — Your login link"
     html = f"""
     <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
