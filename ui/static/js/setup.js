@@ -464,4 +464,102 @@ async function importConfig(event) {
   event.target.value = "";
 }
 
-document.addEventListener("DOMContentLoaded", init);
+// ══════════════════════════════════════
+// COMMUNITY CONFIGS
+// ══════════════════════════════════════
+
+async function loadCommunityConfigs() {
+  const wrap = document.getElementById("community-list");
+  if (!wrap) return;
+  try {
+    const res = await fetch(`/community/configs/${encodeURIComponent(GAME_NAME)}`);
+    const configs = await res.json();
+    if (!configs.length) {
+      wrap.innerHTML = '<p class="muted text-sm">No community configs for this game yet. Be the first to publish!</p>';
+      return;
+    }
+    wrap.innerHTML = configs.map(c => {
+      const verified = c.verification_count > 0
+        ? `<span style="color:#4ade80" title="${c.verification_count} verification(s)">✓ ${c.verification_count}</span>`
+        : `<span class="muted">0 verifications</span>`;
+      const user = c.display_name || c.username;
+      return `<div class="setup-item" style="margin-bottom:8px">
+        <div style="flex:1">
+          <strong>${c.description || c.game_name}</strong>
+          <div class="muted text-sm">by ${user} · ${c.level_count} levels, ${c.run_count} run(s) · ${verified} · ${c.created_at.substring(0, 10)}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="importCommunityConfig(${c.id})" class="btn-sm primary">Import</button>
+          ${window.IS_AUTHENTICATED ? `<button onclick="verifyCommunityConfig(${c.id})" class="btn-sm" style="background:#2a3544;color:#4ade80;border:1px solid #3a4a5a">✓ Verify</button>` : ""}
+        </div>
+      </div>`;
+    }).join("");
+  } catch {
+    wrap.innerHTML = '<p class="muted text-sm">Failed to load community configs.</p>';
+  }
+}
+
+async function publishConfig() {
+  const description = prompt("Describe your config (e.g. '100% all exits, 24 levels'):");
+  if (description === null) return;
+  try {
+    const res = await fetch(`/community/publish/${encodeURIComponent(GAME_NAME)}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({description}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(data.message || "Published!");
+      loadCommunityConfigs();
+    } else {
+      alert(data.error || "Failed to publish.");
+    }
+  } catch {
+    alert("Network error.");
+  }
+}
+
+async function importCommunityConfig(configId) {
+  const overwrite = confirm("Import this config?\n\nExisting levels with the same name will be skipped.\nClick OK to import, or use the overwrite option below.");
+  try {
+    const res = await fetch(`/community/import/${configId}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({overwrite: false}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const r = data.result;
+      alert(`Imported: ${r.levels_created} levels created (${r.levels_skipped} skipped), ${r.runs_created} runs (${r.runs_skipped} skipped)`);
+      await loadLevels();
+      await loadRuns();
+    } else {
+      alert(data.error || "Import failed.");
+    }
+  } catch {
+    alert("Network error.");
+  }
+}
+
+async function verifyCommunityConfig(configId) {
+  try {
+    const res = await fetch(`/community/verify/${configId}`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert("Config verified! Thanks for helping the community.");
+      loadCommunityConfigs();
+    } else {
+      alert(data.error || "Verification failed.");
+    }
+  } catch {
+    alert("Network error.");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  init();
+  loadCommunityConfigs();
+});

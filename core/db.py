@@ -279,6 +279,25 @@ _TABLES_SQL_SQLITE = """
         raw_json TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS community_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_name TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        config_json TEXT NOT NULL,
+        description TEXT,
+        verification_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS config_verifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        config_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (config_id) REFERENCES community_configs(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        UNIQUE(config_id, user_id)
+    );
     CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active);
     CREATE INDEX IF NOT EXISTS idx_sessions_game_name ON sessions(game_name);
     CREATE INDEX IF NOT EXISTS idx_game_events_session ON game_events(session_id);
@@ -292,6 +311,7 @@ _TABLES_SQL_SQLITE = """
     CREATE INDEX IF NOT EXISTS idx_game_levels_game ON game_levels(game_name);
     CREATE INDEX IF NOT EXISTS idx_run_definitions_game ON run_definitions(game_name);
     CREATE INDEX IF NOT EXISTS idx_run_levels_run ON run_levels(run_definition_id);
+    CREATE INDEX IF NOT EXISTS idx_community_configs_game ON community_configs(game_name);
 """
 
 _TABLES_SQL_POSTGRES = """
@@ -376,6 +396,22 @@ _TABLES_SQL_POSTGRES = """
         raw_json TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS community_configs (
+        id SERIAL PRIMARY KEY,
+        game_name TEXT NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        config_json TEXT NOT NULL,
+        description TEXT,
+        verification_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS config_verifications (
+        id SERIAL PRIMARY KEY,
+        config_id INTEGER NOT NULL REFERENCES community_configs(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        UNIQUE(config_id, user_id)
+    );
     CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active);
     CREATE INDEX IF NOT EXISTS idx_sessions_game_name ON sessions(game_name);
     CREATE INDEX IF NOT EXISTS idx_game_events_session ON game_events(session_id);
@@ -390,6 +426,7 @@ _TABLES_SQL_POSTGRES = """
     CREATE INDEX IF NOT EXISTS idx_run_definitions_game ON run_definitions(game_name);
     CREATE INDEX IF NOT EXISTS idx_run_levels_run ON run_levels(run_definition_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_community_configs_game ON community_configs(game_name);
 """
 
 

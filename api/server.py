@@ -26,6 +26,7 @@ from api.routes.run_control import router as run_control_router
 from api.routes.live import router as live_router
 from api.routes.users import router as users_router
 from api.routes.auth import router as auth_router
+from api.routes.community import router as community_router
 from core.db import close_thread_connection, init_db
 from ui.routes import router as ui_router
 
@@ -51,7 +52,8 @@ PUBLIC_BLOCKED_PATHS = (
 
 
 class PublicAccessMiddleware(BaseHTTPMiddleware):
-    """Block write operations and admin pages for non-local requests."""
+    """Access control: local users get full access, authenticated web users
+    get setup/write access, anonymous public users get read-only."""
 
     async def dispatch(self, request: Request, call_next):
         client_ip = request.client.host if request.client else "unknown"
@@ -67,25 +69,48 @@ class PublicAccessMiddleware(BaseHTTPMiddleware):
         if admin_key and request.query_params.get("admin_key") == admin_key:
             is_local = True
 
+        # Check for authenticated web user (session cookie)
+        is_authenticated = False
+        if not is_local:
+            from core.auth_service import get_user_from_session_token
+            session_token = request.cookies.get("smw_session")
+            if session_token:
+                user = get_user_from_session_token(session_token)
+                if user:
+                    is_authenticated = True
+                    request.state.auth_user = user
+
         request.state.is_local = is_local
+        request.state.is_authenticated = is_authenticated
 
         if is_local:
             return await call_next(request)
 
-        # Public user — block write operations (except auth and live push)
         path = request.url.path
+
+        # Write operations
         if request.method in ("POST", "PUT", "DELETE", "PATCH"):
-            # Allow auth endpoints through — they have their own validation
+            # Auth endpoints — always allowed (they handle their own validation)
             if path.startswith("/auth/"):
                 return await call_next(request)
-            # Allow /live/push through — it has its own API key auth
+            # Live push — has its own API key auth
             if path == "/live/push":
                 return await call_next(request)
-            return JSONResponse({"error": "Read-only access"}, status_code=403)
+            # Authenticated users can write to levels, runs, export, run-control
+            if is_authenticated and any(path.startswith(p) for p in (
+                "/levels/", "/runs/", "/export/", "/run/",
+                "/session/", "/tracking/", "/community/",
+            )):
+                return await call_next(request)
+            return JSONResponse({"error": "Read-only access — log in to make changes"}, status_code=403)
 
-        # Block setup pages
+        # Setup pages — allow for authenticated users
         if "/setup" in path:
-            return JSONResponse({"error": "Admin only"}, status_code=403)
+            if is_authenticated:
+                return await call_next(request)
+            return JSONResponse({"error": "Log in to access setup"}, status_code=403)
+
+        # Overlay — local only
         if path == "/overlay":
             return JSONResponse({"error": "Admin only"}, status_code=403)
 
@@ -123,4 +148,5 @@ app.include_router(run_control_router)
 app.include_router(live_router)
 app.include_router(users_router)
 app.include_router(auth_router)
+app.include_router(community_router)
 app.include_router(ui_router)

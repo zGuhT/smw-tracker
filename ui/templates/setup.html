@@ -30,8 +30,20 @@
             Import Config
             <input type="file" accept=".json" onchange="importConfig(event)" style="display:none">
           </label>
+          {% if is_authenticated %}
+          <button onclick="publishConfig()" class="primary" style="background:#4ade80;color:#0d1117">Publish to Community</button>
+          {% endif %}
         </div>
         <p class="muted text-sm mt-sm">Export saves your levels and runs as a JSON file. Import restores them after a database reset.</p>
+      </section>
+
+      <!-- ═══ COMMUNITY CONFIGS ═══ -->
+      <section class="card">
+        <div class="card-title">Community Configs</div>
+        <p class="muted text-sm" style="margin-bottom:12px">
+          Import level and run definitions shared by other users.
+        </p>
+        <div id="community-list"><p class="muted text-sm">Loading...</p></div>
       </section>
 
       <!-- ═══ LEVEL EDITOR ═══ -->
@@ -70,7 +82,10 @@
     </main>
   </div>
 
-  <script>window.GAME_NAME = {{ game_name | tojson }};</script>
-  <script src="/static/js/setup.js?v=2"></script>
+  <script>
+    window.GAME_NAME = {{ game_name | tojson }};
+    window.IS_AUTHENTICATED = {{ is_authenticated | tojson }};
+  </script>
+  <script src="/static/js/setup.js?v=3"></script>
 </body>
 </html>

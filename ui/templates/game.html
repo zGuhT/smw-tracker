@@ -16,7 +16,7 @@
         <a href="/stats-page">Stats</a>
         <a href="/live">Live</a>
         {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
-        {% if is_local %}<a href="/game/{{ game_name }}/setup">Setup</a>{% endif %}
+        {% if is_local or is_authenticated %}<a href="/game/{{ game_name }}/setup">Setup</a>{% endif %}
       </nav>
     </header>
 

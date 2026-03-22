@@ -10,8 +10,13 @@ router = APIRouter(tags=["ui"])
 
 
 def _ctx(request: Request, **extra) -> dict:
-    """Build template context with is_local flag."""
-    return {"request": request, "is_local": getattr(request.state, "is_local", True), **extra}
+    """Build template context with is_local and is_authenticated flags."""
+    return {
+        "request": request,
+        "is_local": getattr(request.state, "is_local", True),
+        "is_authenticated": getattr(request.state, "is_authenticated", False),
+        **extra,
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
