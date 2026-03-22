@@ -202,6 +202,38 @@ async def auth_logout(request: Request):
     return response
 
 
+@router.post("/claim-sessions")
+async def auth_claim_sessions(request: Request):
+    """Assign all unclaimed sessions (user_id IS NULL) to the logged-in user."""
+    user = _get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Not logged in"}, status_code=401)
+
+    from core import db
+    from core.time_utils import utc_now_iso
+
+    # Count unclaimed sessions
+    count_row = db.fetchone("SELECT COUNT(*) AS c FROM sessions WHERE user_id IS NULL")
+    count = count_row["c"] if count_row else 0
+
+    if count == 0:
+        return {"ok": True, "claimed": 0, "message": "No unclaimed sessions found."}
+
+    # Claim them
+    now = utc_now_iso()
+    db.execute(
+        "UPDATE sessions SET user_id = ?, updated_at = ? WHERE user_id IS NULL",
+        (user["id"], now),
+    )
+    db.commit()
+
+    return {
+        "ok": True,
+        "claimed": count,
+        "message": f"Claimed {count} session(s) for {user['username']}.",
+    }
+
+
 # ── HTML page builders ──
 
 def _welcome_page(user: dict) -> str:
@@ -242,6 +274,43 @@ def _welcome_page(user: dict) -> str:
             Go to your profile →
           </a>
         </div>
+
+        <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid #2a3544;">
+          <p style="color:#7a8ba0;font-size:0.85rem;">Have existing sessions from before you created an account?</p>
+          <button id="btn-claim" onclick="claimSessions()"
+                  style="background:#2a3544;color:#e2e8f0;border:1px solid #3a4a5a;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:0.9rem;width:100%;">
+            Claim unclaimed sessions
+          </button>
+          <div id="claim-msg" style="margin-top:0.5rem;font-size:0.85rem;text-align:center;"></div>
+        </div>
+
+        <script>
+        async function claimSessions() {{
+          const btn = document.getElementById('btn-claim');
+          const msg = document.getElementById('claim-msg');
+          btn.disabled = true;
+          btn.textContent = 'Claiming...';
+          try {{
+            const res = await fetch('/auth/claim-sessions', {{method: 'POST'}});
+            const data = await res.json();
+            if (data.ok) {{
+              msg.style.color = '#4ade80';
+              msg.textContent = data.message;
+              btn.textContent = 'Done!';
+            }} else {{
+              msg.style.color = '#f87171';
+              msg.textContent = data.error || 'Failed';
+              btn.disabled = false;
+              btn.textContent = 'Claim unclaimed sessions';
+            }}
+          }} catch {{
+            msg.style.color = '#f87171';
+            msg.textContent = 'Network error';
+            btn.disabled = false;
+            btn.textContent = 'Claim unclaimed sessions';
+          }}
+        }}
+        </script>
       </section>
     </main>
   </div>

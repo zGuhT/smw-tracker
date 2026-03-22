@@ -30,12 +30,33 @@ def _extract_api_key(request: Request) -> str | None:
 
 
 def _check_api_key(request: Request) -> bool:
-    """Validate the tracker's API key (legacy single-key mode)."""
-    expected = os.environ.get("SMW_API_KEY", "")
-    if not expected:
-        return True  # No key configured = allow all (local dev)
+    """Validate the tracker's API key against the users table.
+
+    Accepts any valid user API key from the database.
+    Falls back to SMW_API_KEY env var for backward compatibility.
+    If neither is configured, allows all (local dev).
+    """
     key = _extract_api_key(request)
-    return key == expected
+    if not key:
+        # No key provided — only allow if no auth is configured at all
+        env_key = os.environ.get("SMW_API_KEY", "")
+        return not env_key  # Allow if no env key set (local dev)
+
+    # Check against users table first
+    try:
+        from core.user_service import get_user_by_api_key
+        user = get_user_by_api_key(key)
+        if user:
+            return True
+    except Exception:
+        pass
+
+    # Fall back to legacy single env var
+    env_key = os.environ.get("SMW_API_KEY", "")
+    if env_key and key == env_key:
+        return True
+
+    return False
 
 
 def _resolve_user_id(request: Request) -> str:
