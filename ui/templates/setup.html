@@ -28,6 +28,62 @@
     <main>
       <h2 class="setup-page-title" id="page-title">Game Setup</h2>
 
+      <!-- ═══ HOW TO USE ═══ -->
+      <section class="card">
+        <div class="card-title" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="document.getElementById('help-body').classList.toggle('hidden');this.querySelector('span').textContent=document.getElementById('help-body').classList.contains('hidden')?'▸':'▾';">
+          How This Works <span>▾</span>
+        </div>
+        <div id="help-body">
+          <p style="color:#e2e8f0;line-height:1.7;margin-bottom:12px;">
+            This page lets you define the <strong>levels</strong> and <strong>runs</strong> for a game.
+            These definitions are shared across all users — if someone else has already set up a game,
+            you can import their config from the <strong>Community Configs</strong> section below.
+          </p>
+
+          <div style="color:#6dd5fa;font-weight:600;margin:16px 0 6px;">Level Definitions</div>
+          <p style="color:#7a8ba0;line-height:1.7;margin-bottom:8px;">
+            Each level needs a <strong>name</strong> and a <strong>Level ID</strong> (a 2-character hex code).
+            The Level ID is the internal address the SNES uses for the level — the tracker reads this from
+            hardware memory to know which level you're in. If a level has a <strong>secret exit</strong>
+            (keyhole), check the "Secret exit" box — the tracker will detect keyhole activations and record
+            it as a separate split.
+          </p>
+          <p style="color:#7a8ba0;line-height:1.7;margin-bottom:8px;">
+            <strong>Tip:</strong> If you're on your local machine with QUsb2Snes connected, you can click
+            <strong>"Capture"</strong> while standing in a level to auto-fill the Level ID from hardware.
+            On the web, you'll need to enter it manually — you can find level IDs in ROM maps or
+            Lunar Magic's level list.
+          </p>
+
+          <div style="color:#6dd5fa;font-weight:600;margin:16px 0 6px;">Run Definitions</div>
+          <p style="color:#7a8ba0;line-height:1.7;margin-bottom:8px;">
+            A <strong>run</strong> is an ordered list of levels that defines a speedrun category
+            (e.g. "100%", "Any%", "All Exits"). The tracker uses the run definition to:
+          </p>
+          <ul style="color:#7a8ba0;padding-left:1.2rem;line-height:1.8;margin-bottom:8px;">
+            <li>Show splits in the correct order on the live page</li>
+            <li>Track your PB (personal best) and sum of best</li>
+            <li>Compare your current run against your best</li>
+          </ul>
+          <p style="color:#7a8ba0;line-height:1.7;margin-bottom:8px;">
+            Set the <strong>start delay</strong> (in milliseconds) to account for the time between
+            selecting a file and gaining control (e.g. 3200ms for most SMW hacks).
+            Mark one run as <strong>Default</strong> so the tracker auto-selects it when you start playing.
+          </p>
+          <p style="color:#7a8ba0;line-height:1.7;margin-bottom:8px;">
+            Use <strong>"Add All Levels"</strong> to populate the run with every defined level,
+            then remove or reorder as needed. Drag the ≡ handles to change the order.
+          </p>
+
+          <div style="color:#6dd5fa;font-weight:600;margin:16px 0 6px;">Sharing</div>
+          <p style="color:#7a8ba0;line-height:1.7;">
+            Once you're happy with your setup, click <strong>"Publish to Community"</strong> to share it.
+            Other users can then import your config with one click. You can also
+            <strong>Export</strong> your config as a JSON file for backup.
+          </p>
+        </div>
+      </section>
+
       <!-- ═══ EXPORT / IMPORT ═══ -->
       <section class="card">
         <div class="card-title">Backup & Restore</div>

@@ -1,123 +1,137 @@
-# SFC Tracker
+# SMW Tracker v1.0.0
 
-Real-time Super Famicom / SNES game tracker. Reads console memory via QUsb2Snes,
-tracks play sessions, deaths, level progress, and serves a live dashboard.
+Real-time SNES speedrun tracker. Connects to your SNES hardware via [QUsb2Snes](https://github.com/Skarsnik/QUsb2snes), automatically tracks splits, deaths, and level progress, and streams everything live to [smwtracker.com](https://smwtracker.com).
 
-## Project Structure
+## Features
 
-```
-sfc-tracker/
-├── api/
-│   ├── server.py              # FastAPI app (lifespan-based startup)
-│   └── routes/
-│       ├── session.py         # /session/* endpoints
-│       ├── tracking.py        # /tracking/* endpoints
-│       ├── stats.py           # /stats/* endpoints (including /deaths, /recent-sessions)
-│       └── metadata.py        # /metadata/lookup endpoint
-├── core/
-│   ├── db.py                  # SQLite with WAL mode, thread-local connections
-│   ├── time_utils.py          # Shared UTC/ISO helpers
-│   ├── models.py              # Pydantic request/response models
-│   ├── rom_utils.py           # ROM path cleaning and title normalization
-│   ├── smw_levels.py          # Level ID → name lookup
-│   ├── session_service.py     # Session lifecycle (atomic create)
-│   ├── tracking_service.py    # Event and progress recording
-│   ├── stats_service.py       # SQL-aggregated stats queries
-│   └── metadata_service.py    # Game metadata: cache → overrides → TheGamesDB
-├── hardware/
-│   ├── qusb_client.py         # QUsb2Snes WebSocket client (with reconnection)
-│   ├── smw_memory_map.py      # SNES memory addresses
-│   ├── tracker_client.py      # TrackerClient interface (Direct + HTTP variants)
-│   └── smw_tracker.py         # Hardware polling state machine
-├── ui/
-│   ├── routes.py              # HTML page routes
-│   ├── templates/
-│   │   ├── home.html          # Now Playing dashboard
-│   │   └── stats.html         # Stats & charts page
-│   └── static/
-│       ├── css/app.css        # Dark theme stylesheet
-│       └── js/
-│           ├── home.js        # Session polling + metadata integration
-│           └── stats.js       # Chart.js visualizations
-├── data/
-│   ├── game_overrides.json    # Manual metadata for ROM hacks
-│   └── smw_levels.json        # Level ID → name mapping
-├── run_tracker.py             # Hardware poller entry point
-└── requirements.txt
-```
+- **Automatic split tracking** — detects level entries, exits, keyhole activations, and deaths by reading SNES memory 4 times per second
+- **Live streaming** — your run data syncs to the cloud in real-time so anyone can watch at `smwtracker.com/u/yourname`
+- **Personal stats** — PBs, sum of best, death heatmaps, playtime trends, and run history on your profile
+- **Community configs** — share and import level/run definitions so nobody has to set up the same game twice
+- **Multi-user** — each user has their own profile, stats, and API key
+- **Works with any SMW ROM hack** — the tracker reads memory addresses that are consistent across SMW-based hacks
 
 ## Quick Start
 
 ```bash
-# Install dependencies
+# 1. Clone the repo
+git clone https://github.com/zGuhT/smw-tracker.git
+cd smw-tracker
+
+# 2. Install dependencies
 pip install -r requirements.txt
 
+# 3. Create an account at smwtracker.com and get your API key
+
+# 4. Make sure QUsb2Snes is running and your SNES is connected
+
+# 5. Start the tracker
+python run_tracker.py --cloud --api-key YOUR_API_KEY
+```
+
+## How It Works
+
+1. The tracker connects to QUsb2Snes (which talks to your SD2SNES/FXPak Pro or emulator)
+2. It reads SNES memory addresses to detect game state: current level, game mode, death counter, keyhole activation, exit flags
+3. When you complete a level, the split time and death count are recorded
+4. Session data pushes to `smwtracker.com` every 500ms so viewers see your run live
+5. Stats, PBs, and split history are saved to your profile
+
+## Game Setup
+
+Before your first run of a game, you need to define the levels and run order. You can do this at `smwtracker.com/game/YOUR_GAME/setup` or check if someone has already published a community config.
+
+Each level needs:
+- A **name** (e.g. "Happy Birthday")
+- A **Level ID** — the 2-character hex code from the ROM (e.g. `0A`). You can find these in Lunar Magic or use the "Capture from Hardware" button while standing in the level
+- Whether it has a **secret exit** (keyhole)
+
+Then create a **run definition** — an ordered list of levels for your speedrun category (100%, Any%, etc.) with a start delay.
+
+## Running Locally (Development)
+
+```bash
 # Start the web server
 uvicorn api.server:app --host 0.0.0.0 --port 8000
 
-# In another terminal, start the hardware tracker
+# In another terminal, start the hardware tracker (local mode, no cloud sync)
 python run_tracker.py
+
+# Or with cloud sync
+python run_tracker.py --cloud --api-key YOUR_API_KEY
 ```
 
-## Key Improvements Over Original
+The local web UI is at `http://localhost:8000` and includes the full dashboard, stats, setup pages, and a stream overlay.
 
-### Database
-- **WAL journal mode** — allows concurrent reads/writes without "database is locked" errors
-- **Thread-local connections** — reuses connections per thread instead of creating new ones every call
-- **`busy_timeout = 5000`** — SQLite waits up to 5s for locks instead of failing immediately
-- **Shared `db` module** with `fetchone()`, `fetchall()`, `execute()`, `commit()` helpers
+## Project Structure
 
-### Architecture
-- **Direct service calls** — the hardware tracker calls `record_event()` / `record_progress()` directly
-  instead of making HTTP requests to localhost. This eliminates ~4 HTTP round-trips per second.
-  The `TrackerClient` interface lets you switch between direct and HTTP modes:
-  ```bash
-  python run_tracker.py           # Direct (default, recommended)
-  python run_tracker.py --http    # HTTP mode for split deployments
-  ```
-- **Atomic session creation** — `get_or_create_active_session()` uses a single transaction to
-  prevent duplicate active sessions from race conditions
-- **Lifespan context manager** — replaces deprecated `@app.on_event("startup")`
+```
+smw-tracker/
+├── api/                    # FastAPI web server
+│   ├── server.py           # App setup, middleware, lifespan
+│   └── routes/
+│       ├── auth.py         # Registration, login, email verification
+│       ├── community.py    # Shared game config publish/import/verify
+│       ├── export.py       # Config export/import (JSON)
+│       ├── levels.py       # Level CRUD
+│       ├── live.py         # Live push, SSE streaming, session sync
+│       ├── runs.py         # Run definition CRUD
+│       ├── session.py      # Session start/stop
+│       ├── stats.py        # Aggregated stats queries
+│       └── users.py        # User management
+├── core/                   # Business logic
+│   ├── db.py               # Dual SQLite/Postgres with migrations
+│   ├── auth_service.py     # Password hashing, tokens, web sessions
+│   ├── email_service.py    # Resend API email delivery
+│   ├── session_service.py  # Session lifecycle + payload builder
+│   ├── splits_service.py   # PB, SOB, best segments
+│   ├── stats_service.py    # User-scoped stats queries
+│   ├── user_service.py     # User CRUD
+│   └── export_service.py   # Game config export/import
+├── hardware/               # SNES hardware interface
+│   ├── qusb_client.py      # QUsb2Snes WebSocket client
+│   ├── smw_tracker.py      # State machine: level detection, splits, deaths
+│   ├── smw_memory_map.py   # SNES memory addresses
+│   ├── cloud_client.py     # Cloud sync (push to smwtracker.com)
+│   └── tracker_client.py   # TrackerClient interface
+├── ui/                     # Web frontend
+│   ├── routes.py           # Page routes (landing, profile, game, setup, account)
+│   ├── templates/          # Jinja2 HTML templates
+│   └── static/             # CSS, JS
+├── run_tracker.py          # Entry point for the hardware tracker
+├── migrate_to_cloud.py     # Migrate local SQLite data to cloud Postgres
+├── setup_user.py           # CLI tool to create users
+└── requirements.txt
+```
 
-### Stats Queries
-- **SQL aggregation** — `get_most_played_games()`, `get_playtime_trend()`, etc. use
-  `SUM`/`GROUP BY`/`julianday()` in SQL instead of fetching all rows and looping in Python
-- **New endpoints** — `/stats/deaths` (deaths by level) and `/stats/recent-sessions`
+## Cloud Deployment
 
-### Hardware Tracker
-- **Automatic reconnection** — if QUsb2Snes drops, the tracker waits and reconnects
-  instead of crashing
-- **Proper logging** — uses Python `logging` module instead of print statements
-- **Configurable thresholds** — `TrackerConfig` dataclass for all tuneable values
-- **CLI arguments** — `--poll`, `--verbose`, `--qusb-url`, `--http`, `--api-url`
+The web server runs on [Railway](https://railway.app) with PostgreSQL. Environment variables:
 
-### Frontend
-- **Fixed duplicate element IDs** — the original had `np-game` and `np-platform` appearing twice
-- **Metadata integration wired up** — box art, overview, and display name now actually render
-  when a session is active (was defined but never called in the original)
-- **Death stats chart** — shows deaths per level on the stats page
-- **Recent sessions table** — shows the last 20 sessions with duration and status
-- **Themed Chart.js** — charts use the app's color palette instead of Chart.js defaults
-- **Live status badge** — animated green dot for active sessions
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | Postgres connection string (set by Railway) |
+| `RESEND_API_KEY` | Yes | [Resend](https://resend.com) API key for transactional email |
+| `EMAIL_FROM` | No | From address (default: `SMW Tracker <noreply@smwtracker.com>`) |
+| `BASE_URL` | No | Public URL (default: `https://smwtracker.com`) |
+| `SMW_ADMIN_KEY` | No | Admin access key for debug endpoints |
+| `TURNSTILE_SITE_KEY` | No | Cloudflare Turnstile captcha (registration) |
+| `TURNSTILE_SECRET_KEY` | No | Cloudflare Turnstile secret |
 
-## API Endpoints
+## CLI Options
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/session/start` | Start a new session |
-| POST | `/session/stop` | Stop the active session |
-| GET | `/session/current` | Get current session with progress |
-| POST | `/tracking/event` | Record a game event (death, exit, etc.) |
-| POST | `/tracking/progress` | Record a progress snapshot |
-| GET | `/stats/most-played` | Games ranked by total playtime |
-| GET | `/stats/playtime-trend` | Daily playtime totals |
-| GET | `/stats/sessions-per-day` | Session count per day |
-| GET | `/stats/deaths` | Death count by level |
-| GET | `/stats/recent-sessions` | Most recent sessions |
-| GET | `/metadata/lookup?rom_path=...` | Look up game metadata |
+```
+python run_tracker.py [options]
 
-## Environment Variables
+  --cloud              Enable cloud sync to smwtracker.com
+  --api-key KEY        Your API key (from smwtracker.com/account)
+  --api-url URL        Cloud server URL (default: https://smwtracker.com)
+  --poll SECONDS       Hardware polling interval (default: 0.25)
+  --qusb-url URL       QUsb2Snes WebSocket URL (default: ws://127.0.0.1:23074)
+  --http               Use HTTP mode instead of direct service calls
+  --verbose            Enable debug logging
+```
 
-| Variable | Description |
-|----------|-------------|
-| `TGDB_API_KEY` | TheGamesDB API key for automatic metadata lookup |
+## License
+
+MIT

@@ -39,7 +39,13 @@ def get_user_by_api_key(api_key: str) -> dict[str, Any] | None:
     return db.fetchone("SELECT * FROM users WHERE api_key = ?", (api_key,))
 
 
-def get_all_users() -> list[dict[str, Any]]:
+def get_all_users(public_only: bool = True) -> list[dict[str, Any]]:
+    if public_only:
+        return db.fetchall(
+            """SELECT id, username, display_name, created_at FROM users
+               WHERE username != 'default' AND email_verified = 1
+               ORDER BY id"""
+        )
     return db.fetchall("SELECT id, username, display_name, created_at FROM users ORDER BY id")
 
 

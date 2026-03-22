@@ -22,39 +22,67 @@
     </header>
 
     <main>
-      <section class="card" style="max-width:600px;margin:2rem auto;text-align:center;">
-        <h2 style="color:#6dd5fa;margin-bottom:1rem;">Download the Tracker</h2>
+      <section class="card" style="max-width:640px;margin:2rem auto;">
+        <h2 style="color:#6dd5fa;margin-bottom:1rem;text-align:center;">Download the Tracker</h2>
         <p style="color:#7a8ba0;line-height:1.6;margin-bottom:1.5rem;">
-          The SMW Tracker client connects to your SNES hardware via
-          <a href="https://github.com/Skarsnik/QUsb2snes" style="color:#6dd5fa;">QUsb2Snes</a>
+          The SMW Tracker client runs on your PC, connects to your SNES hardware via
+          <a href="https://github.com/Skarsnik/QUsb2snes" style="color:#6dd5fa;">QUsb2Snes</a>,
           and automatically tracks your splits, deaths, and progress in real-time.
+          Your data syncs to the cloud so anyone can watch your runs live.
         </p>
 
-        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;text-align:left;margin-bottom:1.5rem;">
-          <div style="color:#6dd5fa;font-weight:600;margin-bottom:8px;">Requirements</div>
-          <ul style="color:#7a8ba0;padding-left:1.2rem;line-height:1.8;">
-            <li>Python 3.10+</li>
-            <li>QUsb2Snes connected to your SNES (SD2SNES/FXPak Pro, or emulator)</li>
-            <li>An SMW Tracker account (<a href="/auth/page" style="color:#6dd5fa;">sign up here</a>)</li>
+        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;">
+          <div style="color:#6dd5fa;font-weight:600;margin-bottom:12px;">What You Need</div>
+          <ul style="color:#e2e8f0;padding-left:1.2rem;line-height:2;">
+            <li><strong>Python 3.10+</strong> — <a href="https://www.python.org/downloads/" style="color:#6dd5fa;">python.org/downloads</a></li>
+            <li><strong>QUsb2Snes</strong> — connects to SD2SNES/FXPak Pro, or compatible emulator</li>
+            <li><strong>An SMW Tracker account</strong> — <a href="/auth/page" style="color:#6dd5fa;">sign up here</a> (free)</li>
           </ul>
         </div>
 
-        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;text-align:left;margin-bottom:1.5rem;">
-          <div style="color:#6dd5fa;font-weight:600;margin-bottom:8px;">Quick Start</div>
-          <pre style="color:#e2e8f0;font-size:0.85rem;overflow-x:auto;line-height:1.6;margin:0;">
-# Clone or download the tracker
-git clone https://github.com/your-repo/sfc-tracker.git
-cd sfc-tracker
+        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;">
+          <div style="color:#6dd5fa;font-weight:600;margin-bottom:12px;">Installation</div>
+          <pre style="color:#e2e8f0;font-size:0.85rem;overflow-x:auto;line-height:1.8;margin:0;"><span style="color:#7a8ba0;"># 1. Clone the tracker client</span>
+git clone https://github.com/zGuhT/smw-tracker.git
+cd smw-tracker
 
-# Install dependencies
+<span style="color:#7a8ba0;"># 2. Install Python dependencies</span>
 pip install -r requirements.txt
 
-# Start the tracker (use your API key from account settings)
+<span style="color:#7a8ba0;"># 3. Make sure QUsb2Snes is running and your SNES is connected</span>
+
+<span style="color:#7a8ba0;"># 4. Start the tracker with your API key</span>
+<span style="color:#7a8ba0;">#    (find your key at smwtracker.com → Account)</span>
 python run_tracker.py --cloud --api-key YOUR_API_KEY</pre>
         </div>
 
-        <p style="color:#7a8ba0;font-size:0.85rem;">
-          A standalone desktop client is coming soon. For now, use the Python script above.
+        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;">
+          <div style="color:#6dd5fa;font-weight:600;margin-bottom:12px;">How It Works</div>
+          <ol style="color:#e2e8f0;padding-left:1.2rem;line-height:2;">
+            <li>The tracker reads your SNES memory via QUsb2Snes (4 times per second)</li>
+            <li>It detects game state: which level you're in, deaths, exits, keyhole activations</li>
+            <li>Splits are recorded automatically when you complete a level</li>
+            <li>Session data syncs to <strong>smwtracker.com</strong> so viewers can watch live</li>
+            <li>Your stats, PBs, and split history are saved to your profile</li>
+          </ol>
+        </div>
+
+        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;">
+          <div style="color:#fbbf24;font-weight:600;margin-bottom:12px;">A Note About the Code</div>
+          <p style="color:#7a8ba0;line-height:1.6;margin:0;">
+            The tracker client and the website share the same repository. The code is open source
+            so you can see exactly what it does — no secrets are stored in the repo.
+            Your API key, passwords, and email are never in the code; they're stored securely
+            on the server and in environment variables. The tracker client only needs your API key
+            to authenticate, and it only sends game state data (levels, splits, deaths) to the cloud.
+          </p>
+        </div>
+      </section>
+
+      <section class="card" style="max-width:640px;margin:1rem auto;text-align:center;">
+        <p style="color:#7a8ba0;font-size:0.9rem;">
+          A standalone desktop client with a GUI is planned for the future.
+          For now, the Python script is the way to go.
         </p>
       </section>
     </main>

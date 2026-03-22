@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 
 class QUsb2SnesClient:
-    def __init__(self, url: str = "ws://127.0.0.1:23074", app_name: str = "SFC Tracker") -> None:
+    def __init__(self, url: str = "ws://127.0.0.1:23074", app_name: str = "SMW Tracker") -> None:
         self.url = url
         self.app_name = app_name
         self.ws: WebSocket | None = None

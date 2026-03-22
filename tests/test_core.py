@@ -292,7 +292,7 @@ class TestUserService(unittest.TestCase):
         n2 = f"listtest2_{self._suffix}"
         create_user(n1)
         create_user(n2)
-        users = get_all_users()
+        users = get_all_users(public_only=False)
         names = {u["username"] for u in users}
         self.assertIn(n1, names)
         self.assertIn(n2, names)

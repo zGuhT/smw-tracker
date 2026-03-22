@@ -132,7 +132,9 @@ async def lifespan(app: FastAPI):
     close_thread_connection()
 
 
-app = FastAPI(title="SMW Tracker", lifespan=lifespan)
+from version import __version__
+
+app = FastAPI(title="SMW Tracker", version=__version__, lifespan=lifespan)
 app.add_middleware(PublicAccessMiddleware)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
