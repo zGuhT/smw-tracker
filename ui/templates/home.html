@@ -19,15 +19,40 @@
     </header>
 
     <main>
-      <!-- Now Playing — LiveSplit style -->
+      <!-- Live Now Banner -->
+      <a href="/live" id="live-banner" class="live-banner hidden">
+        <div class="live-banner-badge"><span class="status-badge active">Live</span></div>
+        <div class="live-banner-info">
+          <div class="live-banner-game" id="lb-game">—</div>
+          <div class="live-banner-detail" id="lb-detail">Playing now — click to watch</div>
+        </div>
+        <div class="live-banner-arrow">→</div>
+      </a>
+
+      <!-- Recent Runs -->
+      <section class="card">
+        <div class="card-title">Recent Runs</div>
+        <div id="recent-runs"><p class="muted">Loading...</p></div>
+      </section>
+
+      <!-- Games Library -->
+      <section class="card">
+        <div class="card-title">Games Library</div>
+        <div id="games-list" class="games-grid">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+
+      {% if is_local %}
+      <!-- Admin: Now Playing (local only) -->
       <section class="card" id="np-card">
+        <div class="card-title">Local Tracker</div>
         <div id="np-empty" class="empty-state">
           <div class="icon">&#127918;</div>
           <p>No active session — start a game to begin tracking</p>
         </div>
 
         <div id="np-content" class="hidden">
-          <!-- Game header -->
           <div class="ls-header">
             <img id="np-boxart" class="ls-boxart hidden" alt="">
             <div class="ls-title-area">
@@ -37,13 +62,11 @@
             <span class="status-badge active">Live</span>
           </div>
 
-          <!-- Main timer -->
           <div class="ls-timer-wrap">
-            <div class="ls-timer" id="np-timer">0:00:00</div>
+            <div class="ls-timer" id="np-timer">0:00.00</div>
             <div class="ls-pace muted" id="np-pace"></div>
           </div>
 
-          <!-- Splits table -->
           <div class="ls-splits-wrap">
             <table class="ls-splits" id="np-splits-table">
               <thead>
@@ -59,7 +82,6 @@
             </table>
           </div>
 
-          <!-- Footer stats -->
           <div class="ls-footer">
             <div class="ls-footer-item">
               <span class="ls-footer-label">Deaths</span>
@@ -79,17 +101,14 @@
             </div>
           </div>
 
-          {% if is_local %}
-          <!-- Run Controls -->
           <div class="run-controls" id="run-controls">
-            <button id="btn-pause" class="rc-btn rc-pause" onclick="togglePause()" title="Start / Pause / Resume">⏸</button>
+            <button id="btn-pause" class="rc-btn rc-pause" onclick="togglePause()" title="Pause / Resume">⏸</button>
             <button id="btn-split" class="rc-btn rc-split" onclick="manualSplit()" title="Manual Split">Split</button>
             <button id="btn-undo" class="rc-btn rc-undo" onclick="undoSplit()" title="Undo Last Split">Undo</button>
             <button id="btn-reset" class="rc-btn rc-reset" onclick="resetRun()" title="Reset Run">Reset</button>
             <button class="rc-btn" onclick="toggleSoundSettings()" title="Sound Settings">🔊</button>
           </div>
 
-          <!-- Sound Settings (hidden by default) -->
           <div id="sound-settings" class="sound-settings hidden">
             <div class="sound-settings-title">Sound Alerts</div>
             <label class="sound-toggle"><input type="checkbox" id="snd-gold" checked onchange="saveSoundSettings()"> Gold Split ★</label>
@@ -108,7 +127,6 @@
             <button class="btn-sm" onclick="testSound('pb')">Test PB</button>
           </div>
 
-          <!-- Keyboard Shortcuts Reference -->
           <div id="shortcut-help" class="sound-settings hidden">
             <div class="sound-settings-title">Keyboard Shortcuts</div>
             <span class="muted" style="font-size:12px">
@@ -118,17 +136,9 @@
               <kbd>Num4</kbd> Reset
             </span>
           </div>
-          {% endif %}
         </div>
       </section>
-
-      <!-- Games Library -->
-      <section class="card">
-        <div class="card-title">Games Library</div>
-        <div id="games-list" class="games-grid">
-          <p class="muted">Loading...</p>
-        </div>
-      </section>
+      {% endif %}
     </main>
   </div>
 
