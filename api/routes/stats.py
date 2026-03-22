@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from core import db
-from core.metadata_service import fetch_metadata_for_rom, get_metadata_by_game_name
+from core.metadata_service import get_metadata_by_game_name
 from core.splits_service import get_game_split_summary, get_level_history
 from core.stats_service import (
     get_death_stats,
@@ -58,8 +58,6 @@ def stats_all_games(user_id: int | None = Query(None)):
     for game in games:
         game_name = game["game_name"]
         meta = get_metadata_by_game_name(game_name)
-        if not meta:
-            meta = fetch_metadata_for_rom(game_name)
         result.append({
             **game,
             "display_name": meta.get("display_name", game_name) if meta else game_name,
@@ -74,8 +72,6 @@ def stats_game_detail(game_name: str, user_id: int | None = Query(None)):
     uid = _uid(user_id)
     summary = get_game_summary(game_name, user_id=uid)
     meta = get_metadata_by_game_name(game_name)
-    if not meta:
-        meta = fetch_metadata_for_rom(game_name)
     deaths = get_game_deaths_by_level(game_name, user_id=uid)
     sessions = get_game_sessions(game_name, user_id=uid)
     playtime = get_game_playtime_trend(game_name, user_id=uid)

@@ -305,28 +305,28 @@ def get_run_history(game_name: str, run_definition_id: int | None = None,
 
     if run_definition_id:
         sessions = db.fetchall(
-            f"""SELECT DISTINCT ls.session_id, s.start_time, s.run_definition_id,
+            f"""SELECT ls.session_id, s.start_time, s.run_definition_id,
                       COUNT(DISTINCT ls.level_id) AS levels_completed,
                       SUM(ls.split_ms) AS total_ms,
                       SUM(ls.death_count) AS total_deaths
                FROM level_splits ls
                JOIN sessions s ON s.id = ls.session_id
                WHERE ls.game_name = ? AND s.run_definition_id = ? {uf}
-               GROUP BY ls.session_id
+               GROUP BY ls.session_id, s.start_time, s.run_definition_id
                ORDER BY s.start_time DESC
                LIMIT ?""",
             (game_name, run_definition_id) + up + (limit,),
         )
     else:
         sessions = db.fetchall(
-            f"""SELECT DISTINCT ls.session_id, s.start_time, s.run_definition_id,
+            f"""SELECT ls.session_id, s.start_time, s.run_definition_id,
                       COUNT(DISTINCT ls.level_id) AS levels_completed,
                       SUM(ls.split_ms) AS total_ms,
                       SUM(ls.death_count) AS total_deaths
                FROM level_splits ls
                JOIN sessions s ON s.id = ls.session_id
                WHERE ls.game_name = ? {uf}
-               GROUP BY ls.session_id
+               GROUP BY ls.session_id, s.start_time, s.run_definition_id
                ORDER BY s.start_time DESC
                LIMIT ?""",
             (game_name,) + up + (limit,),
@@ -375,7 +375,7 @@ def get_pb_progression(game_name: str, run_definition_id: int | None = None,
                FROM level_splits ls
                JOIN sessions s ON s.id = ls.session_id
                WHERE ls.game_name = ? AND s.run_definition_id = ? {uf}
-               GROUP BY ls.session_id
+               GROUP BY ls.session_id, s.start_time
                ORDER BY s.start_time ASC""",
             (game_name, run_definition_id) + up,
         )
@@ -387,7 +387,7 @@ def get_pb_progression(game_name: str, run_definition_id: int | None = None,
                FROM level_splits ls
                JOIN sessions s ON s.id = ls.session_id
                WHERE ls.game_name = ? {uf}
-               GROUP BY ls.session_id
+               GROUP BY ls.session_id, s.start_time
                ORDER BY s.start_time ASC""",
             (game_name,) + up,
         )
