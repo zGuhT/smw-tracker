@@ -1,6 +1,7 @@
 /* ── SMW Tracker — Game Setup page ── */
 
 const GAME_NAME = window.GAME_NAME;
+const IS_LOCAL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 const $ = (id) => document.getElementById(id);
 
 let gameLevels = [];
@@ -37,7 +38,7 @@ function renderLevels() {
         ${lv.has_secret_exit ? '<span class="setup-item-badge secret">Secret Exit</span>' : ''}
       </div>
       <div class="setup-item-actions">
-        <button onclick="captureLevel(${lv.id})" class="btn-sm" title="Read level ID from hardware">Capture</button>
+        ${IS_LOCAL ? `<button onclick="captureLevel(${lv.id})" class="btn-sm" title="Read level ID from hardware">Capture</button>` : ''}
         <button onclick="promptEditLevel(${lv.id})" class="btn-sm">Edit</button>
         <button onclick="removeLevel(${lv.id})" class="btn-sm btn-danger">Delete</button>
       </div>

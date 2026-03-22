@@ -313,8 +313,9 @@ def _welcome_page(user: dict) -> str:
     <header class="page-header">
       <h1>SMW://TRACKER</h1>
       <nav>
-        <a href="/u/{user['username']}">My Profile</a>
-        <a href="/live?user={user['id']}">Live</a>
+        <a href="/u/{user['username']}">Home</a>
+        <a href="/download">Download</a>
+        <a href="/u/{user['username']}/account">Account</a>
       </nav>
     </header>
     <main>

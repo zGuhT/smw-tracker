@@ -113,7 +113,8 @@
       <section class="card">
         <div class="card-title">Level Definitions</div>
         <p class="muted text-sm" style="margin-bottom:16px">
-          Add all levels for this game. Use "Capture from Hardware" while standing in a level on your SNES to auto-fill the level ID.
+          Add all levels for this game. Enter the level name and its hex Level ID.
+          {% if is_local %}Use "Capture from Hardware" while standing in a level on your SNES to auto-fill the level ID.{% endif %}
         </p>
 
         <div id="levels-list" class="setup-list"></div>
