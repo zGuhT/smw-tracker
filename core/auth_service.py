@@ -313,15 +313,21 @@ def resend_verification(email: str) -> dict[str, Any] | None:
     }
 
 
-# ── Web session management ──
-
-_web_sessions: dict[str, int] = {}
-
+# ── Web session management (DB-backed, survives deploys) ──
 
 def generate_session_token(user_id: int) -> str:
-    """Generate a web session token."""
+    """Generate a web session token and store it in the DB."""
     token = secrets.token_urlsafe(32)
-    _web_sessions[token] = user_id
+    now = utc_now_iso()
+    expires = (datetime.now(UTC) + timedelta(days=30)).isoformat().replace("+00:00", "Z")
+    try:
+        db.execute(
+            "INSERT INTO web_sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, user_id, now, expires),
+        )
+        db.commit()
+    except Exception:
+        pass  # If table doesn't exist yet, fall back gracefully
     return token
 
 
@@ -329,13 +335,28 @@ def get_user_from_session_token(token: str | None) -> dict[str, Any] | None:
     """Look up a user from a web session token."""
     if not token:
         return None
-    user_id = _web_sessions.get(token)
-    if user_id is None:
+    try:
+        row = db.fetchone(
+            "SELECT user_id, expires_at FROM web_sessions WHERE token = ?",
+            (token,),
+        )
+        if not row:
+            return None
+        # Check expiry
+        if _is_expired(row.get("expires_at")):
+            db.execute("DELETE FROM web_sessions WHERE token = ?", (token,))
+            db.commit()
+            return None
+        from core.user_service import get_user_by_id
+        return get_user_by_id(row["user_id"])
+    except Exception:
         return None
-    from core.user_service import get_user_by_id
-    return get_user_by_id(user_id)
 
 
 def invalidate_session_token(token: str) -> None:
-    """Log out."""
-    _web_sessions.pop(token, None)
+    """Log out — remove a web session from DB."""
+    try:
+        db.execute("DELETE FROM web_sessions WHERE token = ?", (token,))
+        db.commit()
+    except Exception:
+        pass

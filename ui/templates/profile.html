@@ -130,12 +130,14 @@
           const time = formatHours(g.total_playtime_seconds);
           const sessions = g.session_count === 1 ? "1 session" : `${g.session_count} sessions`;
           const img = g.boxart_url
-            ? `<img src="${g.boxart_url}" alt="${displayName}" loading="lazy">`
-            : '<div class="game-card-placeholder">🎮</div>';
+            ? `<img src="${g.boxart_url}" alt="${displayName}" loading="lazy" class="game-card-art">`
+            : '<div class="game-card-art-placeholder">🎮</div>';
           return `<a href="${gameUrl}" class="game-card">
-            <div class="game-card-img">${img}</div>
-            <div class="game-card-name">${displayName}</div>
-            <div class="game-card-meta">${time} &nbsp; ${sessions}</div>
+            ${img}
+            <div class="game-card-body">
+              <div class="game-card-title">${displayName}</div>
+              <div class="game-card-meta"><span>${time}</span><span>${sessions}</span></div>
+            </div>
           </a>`;
         }).join("");
       } catch { $("games-list").innerHTML = '<p class="muted">Failed to load</p>'; }

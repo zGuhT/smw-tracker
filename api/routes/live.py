@@ -106,7 +106,15 @@ def _sync_session_to_db(payload: dict, user_id: int) -> None:
     from core import db
     from core.time_utils import utc_now_iso
 
-    if not payload.get("is_active") or not payload.get("game_name"):
+    game_name = payload.get("game_name") or ""
+    is_active = payload.get("is_active", False)
+
+    # Filter out non-game states (FXPak menu, no ROM loaded, test artifacts)
+    # A real game name should be at least 2 chars and not a known placeholder
+    _IGNORE_GAMES = {"", "AnyGame", "TrackGame", "TestGame", "Unknown"}
+    is_real_game = is_active and game_name and game_name not in _IGNORE_GAMES and len(game_name) >= 2
+
+    if not is_real_game:
         # Session ended or no game — ensure any active session for this user is closed
         active = db.fetchone(
             "SELECT id FROM sessions WHERE user_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1",
@@ -121,7 +129,6 @@ def _sync_session_to_db(payload: dict, user_id: int) -> None:
             db.commit()
         return
 
-    game_name = payload["game_name"]
     platform = payload.get("platform", "SNES")
     start_time = payload.get("start_time")
     now = utc_now_iso()

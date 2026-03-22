@@ -298,6 +298,13 @@ _TABLES_SQL_SQLITE = """
         FOREIGN KEY (user_id) REFERENCES users(id),
         UNIQUE(config_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS web_sessions (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
     CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active);
     CREATE INDEX IF NOT EXISTS idx_sessions_game_name ON sessions(game_name);
     CREATE INDEX IF NOT EXISTS idx_game_events_session ON game_events(session_id);
@@ -411,6 +418,12 @@ _TABLES_SQL_POSTGRES = """
         user_id INTEGER NOT NULL REFERENCES users(id),
         created_at TEXT NOT NULL,
         UNIQUE(config_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS web_sessions (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active);
     CREATE INDEX IF NOT EXISTS idx_sessions_game_name ON sessions(game_name);
