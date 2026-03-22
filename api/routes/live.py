@@ -82,6 +82,16 @@ async def live_push(request: Request):
     try:
         payload = await request.json()
         user_id = _resolve_user_id(request)
+
+        # Enrich payload with cloud run config (run levels, PB, SOB)
+        game_name = payload.get("game_name")
+        if game_name and payload.get("is_active"):
+            try:
+                _enrich_payload_from_cloud(payload, game_name, int(user_id) if user_id != DEFAULT_USER else None)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Payload enrichment failed: %s", exc)
+
         live_state.update(payload, user_id=user_id)
 
         # Sync session data to cloud DB
@@ -95,9 +105,87 @@ async def live_push(request: Request):
         # Drain any pending commands for this user
         commands = live_state.drain_commands(user_id)
 
-        return {"ok": True, "user_id": user_id, "commands": commands}
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "commands": commands,
+        }
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+# Cache for enrichment data (avoid querying DB on every push)
+_enrich_cache: dict[str, dict] = {}
+_enrich_cache_split_count: dict[str, int] = {}
+
+
+def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | None) -> None:
+    """Add run_levels, PB, SOB, and best segments from the cloud DB to the payload.
+
+    Only refreshes when split count changes to avoid hammering the DB every 500ms.
+    """
+    from core import db
+    from core.smw_levels import resolve_level_name
+
+    splits = payload.get("splits", [])
+    split_count = len(splits)
+    cache_key = f"{game_name}:{user_id or 'global'}"
+
+    # Check if we need to refresh the cache
+    if cache_key in _enrich_cache and _enrich_cache_split_count.get(cache_key) == split_count:
+        # Use cached data
+        cached = _enrich_cache[cache_key]
+        payload.update(cached)
+        return
+
+    # Build run_levels from cloud DB
+    from core.run_service import get_default_run_config
+    run_config = get_default_run_config(game_name)
+
+    enrichment = {}
+
+    if run_config:
+        enrichment["run_name"] = run_config.get("run_name")
+        enrichment["run_delay_ms"] = run_config.get("start_delay_ms", 0)
+
+        run_levels = []
+        for rl in run_config.get("levels", []):
+            lid = rl.get("level_id", "")
+            exit_type = rl.get("exit_type", "normal")
+            split_key = f"{lid}:secret" if exit_type == "secret" else lid
+            run_levels.append({
+                "level_id": split_key,
+                "level_name": resolve_level_name(split_key, game_name),
+                "exit_type": exit_type,
+            })
+        enrichment["run_levels"] = run_levels
+
+        run_level_ids = [rl["level_id"] for rl in run_levels]
+
+        # PB splits
+        from core.splits_service import get_pb_run_for_levels, get_best_segments_for_run, get_sum_of_best_for_run
+        pb_splits = get_pb_run_for_levels(game_name, run_level_ids, user_id=user_id)
+        enrichment["pb_splits"] = pb_splits
+        enrichment["pb_total_ms"] = sum(s["split_ms"] for s in pb_splits) if pb_splits else None
+
+        # Best segments
+        best_segs = get_best_segments_for_run(game_name, run_level_ids, user_id=user_id)
+        enrichment["best_segments"] = {s["level_id"]: s["best_ms"] for s in best_segs}
+
+        # Sum of best
+        sob = get_sum_of_best_for_run(game_name, run_level_ids, user_id=user_id)
+        enrichment["sum_of_best_ms"] = sob
+
+        # Run completion check
+        if splits:
+            completed_ids = {s["level_id"] for s in splits}
+            enrichment["run_complete"] = all(lid in completed_ids for lid in run_level_ids)
+
+    # Cache it
+    _enrich_cache[cache_key] = enrichment
+    _enrich_cache_split_count[cache_key] = split_count
+
+    payload.update(enrichment)
 
 
 def _sync_session_to_db(payload: dict, user_id: int) -> None:

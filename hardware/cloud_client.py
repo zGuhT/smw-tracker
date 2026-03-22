@@ -123,6 +123,10 @@ class CloudSyncClient(TrackerClient):
                         commands = resp_data.get("commands", [])
                         for cmd in commands:
                             self._execute_command(cmd)
+                        # Sync game config from cloud to local
+                        game_config = resp_data.get("game_config")
+                        if game_config:
+                            self._sync_game_config(game_config, payload.get("game_name"))
                     except Exception:
                         pass
 
@@ -255,3 +259,70 @@ class CloudSyncClient(TrackerClient):
         qusb.close()
         log.info("SNES soft reset via remote command")
         return {"command_id": cmd_id, "type": "snes_reset", "success": True}
+
+    # ── Game config sync (cloud → local) ──
+
+    _last_synced_config: str | None = None
+
+    def _sync_game_config(self, config: dict, game_name: str | None) -> None:
+        """Sync game levels and run definitions from cloud to local DB."""
+        if not config or not game_name:
+            return
+
+        config_hash = str(hash(json.dumps(config, sort_keys=True, default=str)))
+        if config_hash == self._last_synced_config:
+            return
+        self._last_synced_config = config_hash
+
+        try:
+            from core.export_service import import_game_config
+
+            run_name = config.get("run_name", "100%")
+            run_levels = config.get("levels", [])
+            start_delay = config.get("start_delay_ms", 0)
+
+            seen_levels = set()
+            levels_list = []
+            run_level_entries = []
+
+            for rl in run_levels:
+                lid = rl.get("level_id", "")
+                lname = rl.get("level_name", lid)
+                exit_type = rl.get("exit_type", "normal")
+                has_secret = 1 if exit_type == "secret" else 0
+                base_lid = lid.replace(":secret", "")
+
+                if base_lid not in seen_levels:
+                    seen_levels.add(base_lid)
+                    levels_list.append({
+                        "level_name": lname.replace(" (Secret)", ""),
+                        "level_id": base_lid,
+                        "has_secret_exit": has_secret,
+                    })
+
+                run_level_entries.append({
+                    "level_id": base_lid,
+                    "exit_type": exit_type,
+                })
+
+            import_data = {
+                "game_name": game_name,
+                "levels": levels_list,
+                "runs": [{
+                    "run_name": run_name,
+                    "is_default": 1,
+                    "start_delay_ms": start_delay,
+                    "levels": run_level_entries,
+                }],
+            }
+
+            result = import_game_config(import_data, overwrite=False)
+            if result.get("levels_created", 0) > 0 or result.get("runs_created", 0) > 0:
+                log.info("Synced config from cloud: %s (%d levels, %d runs)",
+                         game_name, result.get("levels_created", 0), result.get("runs_created", 0))
+                from core.session_service import get_current_session_payload
+                if hasattr(get_current_session_payload, "_cache"):
+                    get_current_session_payload._cache = {}
+
+        except Exception as exc:
+            log.debug("Config sync skipped: %s", exc)
