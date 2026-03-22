@@ -35,6 +35,7 @@
       <nav>
         <a href="/">Home</a>
         <a href="/games" class="active">Games</a>
+        <a href="/leaderboards">Leaderboards</a>
         <a href="/download">Download</a>
         {% if auth_user %}
           <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
@@ -93,7 +94,7 @@
             </div>`
           : '';
         return `<div class="gl-card">
-          <a href="/game/${encodeURIComponent(g.game_name)}/setup" style="text-decoration:none;color:inherit;">
+          <a href="/game/${encodeURIComponent(g.game_name)}" style="text-decoration:none;color:inherit;">
             ${img}
             <div class="gl-card-body">
               <div class="gl-card-title">${name}</div>
