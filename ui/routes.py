@@ -10,17 +10,25 @@ router = APIRouter(tags=["ui"])
 
 
 def _ctx(request: Request, **extra) -> dict:
-    """Build template context with is_local and is_authenticated flags."""
+    """Build template context with is_local, is_authenticated, and auth_user."""
+    auth_user = getattr(request.state, "auth_user", None)
     return {
         "request": request,
         "is_local": getattr(request.state, "is_local", True),
         "is_authenticated": getattr(request.state, "is_authenticated", False),
+        "auth_user": auth_user,
         **extra,
     }
 
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
+    # Redirect logged-in users to their profile
+    if getattr(request.state, "is_authenticated", False):
+        user = getattr(request.state, "auth_user", None)
+        if user:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(f"/u/{user['username']}", status_code=302)
     return templates.TemplateResponse("home.html", _ctx(request))
 
 
@@ -31,7 +39,13 @@ def stats_page(request: Request):
 
 @router.get("/game/{game_name}", response_class=HTMLResponse)
 def game_detail_page(request: Request, game_name: str):
-    return templates.TemplateResponse("game.html", _ctx(request, game_name=game_name))
+    # Pass user_id for logged-in users so game.js scopes stats
+    auth_user = getattr(request.state, "auth_user", None)
+    return templates.TemplateResponse("game.html", _ctx(
+        request, game_name=game_name,
+        profile_user_id=auth_user["id"] if auth_user else None,
+        profile_username=auth_user["username"] if auth_user else None,
+    ))
 
 
 @router.get("/game/{game_name}/setup", response_class=HTMLResponse)

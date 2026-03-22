@@ -15,6 +15,9 @@
         <a href="/stats-page">Stats</a>
         {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
         <a id="back-link" href="/">Back to Game</a>
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}">{{ auth_user.display_name or auth_user.username }}</a>
+        {% endif %}
       </nav>
     </header>
 

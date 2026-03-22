@@ -16,6 +16,11 @@
         <a href="/stats-page" class="active">Stats</a>
         <a href="/live">Live</a>
         {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}">{{ auth_user.display_name or auth_user.username }}</a>
+        {% else %}
+          <a href="/auth/page">Sign Up</a>
+        {% endif %}
       </nav>
     </header>
 
