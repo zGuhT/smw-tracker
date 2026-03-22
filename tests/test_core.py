@@ -570,14 +570,14 @@ class TestAuthService(unittest.TestCase):
         init_db()
         import uuid
         self._s = uuid.uuid4().hex[:6]
+        self._pwd = "Test1234!"  # Meets all requirements
 
     def test_register_and_verify(self):
         from core.auth_service import register_user, verify_token
-        result = register_user(f"auth_{self._s}", f"auth_{self._s}@test.com")
+        result = register_user(f"auth_{self._s}", f"auth_{self._s}@test.com", self._pwd)
         self.assertIsNotNone(result["token"])
         self.assertIsNotNone(result["user_id"])
 
-        # Verify the token
         user = verify_token(result["token"])
         self.assertIsNotNone(user)
         self.assertEqual(user["username"], f"auth_{self._s}")
@@ -590,61 +590,88 @@ class TestAuthService(unittest.TestCase):
 
     def test_verify_token_single_use(self):
         from core.auth_service import register_user, verify_token
-        result = register_user(f"once_{self._s}", f"once_{self._s}@test.com")
+        result = register_user(f"once_{self._s}", f"once_{self._s}@test.com", self._pwd)
 
         user1 = verify_token(result["token"])
         self.assertIsNotNone(user1)
 
-        # Second use should fail — token is cleared after verification
         user2 = verify_token(result["token"])
         self.assertIsNone(user2)
 
     def test_duplicate_username(self):
         from core.auth_service import register_user
-        register_user(f"dup_{self._s}", f"dup1_{self._s}@test.com")
+        register_user(f"dup_{self._s}", f"dup1_{self._s}@test.com", self._pwd)
         with self.assertRaises(ValueError):
-            register_user(f"dup_{self._s}", f"dup2_{self._s}@test.com")
+            register_user(f"dup_{self._s}", f"dup2_{self._s}@test.com", self._pwd)
 
     def test_duplicate_email(self):
         from core.auth_service import register_user
-        register_user(f"em1_{self._s}", f"same_{self._s}@test.com")
+        register_user(f"em1_{self._s}", f"same_{self._s}@test.com", self._pwd)
         with self.assertRaises(ValueError):
-            register_user(f"em2_{self._s}", f"same_{self._s}@test.com")
+            register_user(f"em2_{self._s}", f"same_{self._s}@test.com", self._pwd)
 
-    def test_login_flow(self):
-        from core.auth_service import register_user, verify_token, request_login
-        # Register and verify first
-        reg = register_user(f"login_{self._s}", f"login_{self._s}@test.com")
+    def test_password_login(self):
+        from core.auth_service import register_user, verify_token, login_with_password
+        reg = register_user(f"pwl_{self._s}", f"pwl_{self._s}@test.com", self._pwd)
         verify_token(reg["token"])
 
-        # Now request login
-        login = request_login(f"login_{self._s}@test.com")
-        self.assertIsNotNone(login)
-        self.assertIsNotNone(login["token"])
-
-        # Verify the login token
-        user = verify_token(login["token"])
+        # Login by username
+        user = login_with_password(f"pwl_{self._s}", self._pwd)
         self.assertIsNotNone(user)
-        self.assertEqual(user["username"], f"login_{self._s}")
+        self.assertEqual(user["username"], f"pwl_{self._s}")
+
+        # Login by email
+        user2 = login_with_password(f"pwl_{self._s}@test.com", self._pwd)
+        self.assertIsNotNone(user2)
+
+    def test_wrong_password_fails(self):
+        from core.auth_service import register_user, verify_token, login_with_password
+        reg = register_user(f"wpf_{self._s}", f"wpf_{self._s}@test.com", self._pwd)
+        verify_token(reg["token"])
+
+        user = login_with_password(f"wpf_{self._s}", "WrongPassword1!")
+        self.assertIsNone(user)
 
     def test_login_unverified_fails(self):
-        from core.auth_service import register_user, request_login
-        register_user(f"unver_{self._s}", f"unver_{self._s}@test.com")
-        # Don't verify — login should return None
-        result = request_login(f"unver_{self._s}@test.com")
-        self.assertIsNone(result)
+        from core.auth_service import register_user, login_with_password
+        register_user(f"unver_{self._s}", f"unver_{self._s}@test.com", self._pwd)
+        user = login_with_password(f"unver_{self._s}", self._pwd)
+        self.assertIsNone(user)
 
-    def test_login_unknown_email(self):
-        from core.auth_service import request_login
-        result = request_login("nobody@nowhere.com")
-        self.assertIsNone(result)
+    def test_password_validation(self):
+        from core.auth_service import validate_password
+        self.assertIsNotNone(validate_password("short"))  # Too short
+        self.assertIsNotNone(validate_password("alllowercase1!"))  # No uppercase
+        self.assertIsNotNone(validate_password("ALLUPPERCASE1!"))  # No lowercase
+        self.assertIsNotNone(validate_password("NoNumbers!!"))  # No digit
+        self.assertIsNotNone(validate_password("NoSymbol1234"))  # No symbol
+        self.assertIsNone(validate_password("ValidPass1!"))  # Valid
+
+    def test_password_hashing(self):
+        from core.auth_service import hash_password, verify_password
+        h = hash_password("MySecureP@ss1")
+        self.assertTrue(verify_password("MySecureP@ss1", h))
+        self.assertFalse(verify_password("WrongPassword", h))
+        self.assertIn("$", h)  # Salt$hash format
+
+    def test_magic_link_flow(self):
+        from core.auth_service import register_user, verify_token, request_magic_link
+        reg = register_user(f"magic_{self._s}", f"magic_{self._s}@test.com", self._pwd)
+        verify_token(reg["token"])
+
+        login = request_magic_link(f"magic_{self._s}@test.com")
+        self.assertIsNotNone(login)
+
+        user = verify_token(login["token"])
+        self.assertIsNotNone(user)
+        self.assertEqual(user["username"], f"magic_{self._s}")
 
     def test_session_tokens(self):
         from core.auth_service import (
             generate_session_token, get_user_from_session_token,
             invalidate_session_token, register_user, verify_token,
         )
-        reg = register_user(f"sess_{self._s}", f"sess_{self._s}@test.com")
+        reg = register_user(f"sess_{self._s}", f"sess_{self._s}@test.com", self._pwd)
         user = verify_token(reg["token"])
 
         token = generate_session_token(user["id"])

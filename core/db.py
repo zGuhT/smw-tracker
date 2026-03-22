@@ -202,6 +202,7 @@ _TABLES_SQL_SQLITE = """
         email TEXT UNIQUE,
         display_name TEXT,
         api_key TEXT UNIQUE,
+        password_hash TEXT,
         email_verified INTEGER NOT NULL DEFAULT 0,
         verification_token TEXT,
         verification_expires TEXT,
@@ -300,6 +301,7 @@ _TABLES_SQL_POSTGRES = """
         email TEXT UNIQUE,
         display_name TEXT,
         api_key TEXT UNIQUE,
+        password_hash TEXT,
         email_verified INTEGER NOT NULL DEFAULT 0,
         verification_token TEXT,
         verification_expires TEXT,
@@ -443,6 +445,7 @@ def init_db() -> None:
             "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
             "ALTER TABLE users ADD COLUMN verification_token TEXT",
             "ALTER TABLE users ADD COLUMN verification_expires TEXT",
+            "ALTER TABLE users ADD COLUMN password_hash TEXT",
         ]
         cur = conn.cursor()
         for migration in _pg_migrations:
@@ -466,6 +469,7 @@ def init_db() -> None:
             "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
             "ALTER TABLE users ADD COLUMN verification_token TEXT",
             "ALTER TABLE users ADD COLUMN verification_expires TEXT",
+            "ALTER TABLE users ADD COLUMN password_hash TEXT",
             "ALTER TABLE game_metadata ADD COLUMN developer TEXT",
             "ALTER TABLE game_metadata ADD COLUMN publisher TEXT",
             "ALTER TABLE game_metadata ADD COLUMN players TEXT",

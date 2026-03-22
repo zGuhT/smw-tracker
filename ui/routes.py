@@ -46,7 +46,9 @@ def live_page(request: Request):
 
 @router.get("/auth/page", response_class=HTMLResponse)
 def auth_page(request: Request):
-    return templates.TemplateResponse("auth.html", _ctx(request))
+    import os
+    turnstile_key = os.environ.get("TURNSTILE_SITE_KEY", "")
+    return templates.TemplateResponse("auth.html", _ctx(request, turnstile_site_key=turnstile_key))
 
 
 @router.get("/u/{username}", response_class=HTMLResponse)

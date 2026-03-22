@@ -5,6 +5,9 @@
   <title>Sign Up / Log In — SMW Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="/static/css/app.css?v=2" rel="stylesheet">
+  {% if turnstile_site_key %}
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  {% endif %}
   <style>
     .auth-wrap { max-width: 420px; margin: 2rem auto; }
     .auth-tabs { display: flex; gap: 0; margin-bottom: 0; }
@@ -34,6 +37,13 @@
     .auth-msg.err { background: rgba(248, 113, 113, 0.1); color: #f87171; }
     .auth-msg.hidden { display: none; }
     .auth-hint { color: #7a8ba0; font-size: 0.8rem; margin-top: 0.3rem; }
+    .pwd-reqs { color: #7a8ba0; font-size: 0.75rem; margin-top: 0.3rem; line-height: 1.5; }
+    .pwd-reqs span.met { color: #4ade80; }
+    .api-key-box { background:#0d1117; border:1px solid #2a3544; border-radius:8px;
+      padding:1rem; margin:1rem 0; position:relative; display:none; }
+    .api-key-box code { color:#6dd5fa; font-size:0.95rem; word-break:break-all; }
+    .link-btn { background: none; border: none; color: #6dd5fa; cursor: pointer;
+      font-size: 0.85rem; text-decoration: underline; padding: 0; }
   </style>
 </head>
 <body>
@@ -42,7 +52,7 @@
       <h1>SMW://TRACKER</h1>
       <nav>
         <a href="/">Home</a>
-        <a href="/auth/page" class="active">Sign Up</a>
+        <a href="/auth/page" class="active">Account</a>
       </nav>
     </header>
 
@@ -51,7 +61,6 @@
         <div class="auth-tabs">
           <div class="auth-tab active" id="tab-register" onclick="showTab('register')">Sign Up</div>
           <div class="auth-tab" id="tab-login" onclick="showTab('login')">Log In</div>
-          <div class="auth-tab" id="tab-resend" onclick="showTab('resend')">Resend</div>
         </div>
 
         <!-- Register form -->
@@ -59,7 +68,7 @@
           <div class="field">
             <label for="reg-username">Username</label>
             <input type="text" id="reg-username" placeholder="e.g. speedrunner42" maxlength="32"
-                   pattern="[a-z0-9_-]+" autocomplete="username">
+                   autocomplete="username">
             <div class="auth-hint">Lowercase letters, numbers, underscores. This is your profile URL.</div>
           </div>
           <div class="field">
@@ -67,37 +76,71 @@
             <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email">
           </div>
           <div class="field">
+            <label for="reg-password">Password</label>
+            <input type="password" id="reg-password" placeholder="Create a strong password"
+                   autocomplete="new-password" oninput="checkPwdStrength()">
+            <div class="pwd-reqs" id="pwd-reqs">
+              <span id="pw-len">✗ 8+ characters</span> &nbsp;
+              <span id="pw-upper">✗ Uppercase</span> &nbsp;
+              <span id="pw-lower">✗ Lowercase</span> &nbsp;
+              <span id="pw-num">✗ Number</span> &nbsp;
+              <span id="pw-sym">✗ Symbol</span>
+            </div>
+          </div>
+          <div class="field">
             <label for="reg-display">Display Name <span class="muted">(optional)</span></label>
             <input type="text" id="reg-display" placeholder="Shown on your profile" maxlength="64">
           </div>
+          {% if turnstile_site_key %}
+          <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="dark"
+               id="captcha-register" style="margin-bottom:1rem;"></div>
+          {% endif %}
           <button class="auth-btn" id="btn-register" onclick="doRegister()">Create Account</button>
           <div class="auth-msg hidden" id="msg-register"></div>
         </div>
 
         <!-- Login form -->
         <div class="auth-form hidden" id="form-login">
+          <div class="field">
+            <label for="login-user">Username or Email</label>
+            <input type="text" id="login-user" placeholder="username or you@example.com"
+                   autocomplete="username">
+          </div>
+          <div class="field">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" placeholder="Your password"
+                   autocomplete="current-password">
+          </div>
+          <button class="auth-btn" id="btn-login" onclick="doLogin()">Log In</button>
+          <div class="auth-msg hidden" id="msg-login"></div>
+          <div style="margin-top:1rem;text-align:center;">
+            <button class="link-btn" onclick="showTab('forgot')">Forgot password? Get a login link</button>
+          </div>
+          <!-- API key shown after successful login -->
+          <div class="api-key-box" id="login-key-box">
+            <div style="color:#7a8ba0;font-size:0.8rem;margin-bottom:0.3rem;">Your API Key:</div>
+            <code id="login-api-key"></code>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('login-api-key').textContent).then(()=>this.textContent='Copied!')"
+                    style="position:absolute;top:0.5rem;right:0.5rem;background:#2a3544;color:#e2e8f0;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.8rem;">
+              Copy
+            </button>
+          </div>
+        </div>
+
+        <!-- Forgot password / magic link form -->
+        <div class="auth-form hidden" id="form-forgot">
           <p style="color:#7a8ba0;font-size:0.9rem;margin-bottom:1rem;">
             Enter your email and we'll send you a login link — no password needed.
           </p>
           <div class="field">
-            <label for="login-email">Email</label>
-            <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
+            <label for="forgot-email">Email</label>
+            <input type="email" id="forgot-email" placeholder="you@example.com" autocomplete="email">
           </div>
-          <button class="auth-btn" id="btn-login" onclick="doLogin()">Send Login Link</button>
-          <div class="auth-msg hidden" id="msg-login"></div>
-        </div>
-
-        <!-- Resend verification form -->
-        <div class="auth-form hidden" id="form-resend">
-          <p style="color:#7a8ba0;font-size:0.9rem;margin-bottom:1rem;">
-            Signed up but didn't get the email? Enter your email to get a new verification link.
-          </p>
-          <div class="field">
-            <label for="resend-email">Email</label>
-            <input type="email" id="resend-email" placeholder="you@example.com" autocomplete="email">
+          <button class="auth-btn" id="btn-forgot" onclick="doForgot()">Send Login Link</button>
+          <div class="auth-msg hidden" id="msg-forgot"></div>
+          <div style="margin-top:1rem;text-align:center;">
+            <button class="link-btn" onclick="showTab('login')">← Back to login</button>
           </div>
-          <button class="auth-btn" id="btn-resend" onclick="doResend()">Resend Verification</button>
-          <div class="auth-msg hidden" id="msg-resend"></div>
         </div>
       </div>
     </main>
@@ -107,27 +150,60 @@
     const $ = id => document.getElementById(id);
 
     function showTab(tab) {
-      for (const t of ["register", "login", "resend"]) {
-        $("tab-" + t).classList.toggle("active", t === tab);
-        $("form-" + t).classList.toggle("hidden", t !== tab);
+      const tabs = ["register", "login", "forgot"];
+      for (const t of tabs) {
+        const tabEl = $("tab-" + t);
+        if (tabEl) tabEl.classList.toggle("active", t === tab);
+        const formEl = $("form-" + t);
+        if (formEl) formEl.classList.toggle("hidden", t !== tab);
+      }
+      // Forgot doesn't have its own tab button — highlight login tab
+      if (tab === "forgot") {
+        $("tab-login").classList.add("active");
       }
     }
 
     function showMsg(id, text, ok) {
       const el = $(id);
-      el.textContent = text;
+      el.innerHTML = text;
       el.className = `auth-msg ${ok ? "ok" : "err"}`;
     }
 
+    // ── Password strength checker ──
+    function checkPwdStrength() {
+      const pwd = $("reg-password").value;
+      const checks = [
+        ["pw-len", pwd.length >= 8, "8+ characters"],
+        ["pw-upper", /[A-Z]/.test(pwd), "Uppercase"],
+        ["pw-lower", /[a-z]/.test(pwd), "Lowercase"],
+        ["pw-num", /[0-9]/.test(pwd), "Number"],
+        ["pw-sym", /[^A-Za-z0-9]/.test(pwd), "Symbol"],
+      ];
+      for (const [id, met, label] of checks) {
+        const el = $(id);
+        el.textContent = `${met ? "✓" : "✗"} ${label}`;
+        el.className = met ? "met" : "";
+      }
+    }
+
+    // ── Register ──
     async function doRegister() {
       const btn = $("btn-register");
       btn.disabled = true;
       const username = $("reg-username").value.trim().toLowerCase();
       const email = $("reg-email").value.trim().toLowerCase();
+      const password = $("reg-password").value;
       const display_name = $("reg-display").value.trim() || undefined;
 
-      if (!username || !email) {
-        showMsg("msg-register", "Username and email are required.", false);
+      // Get captcha token if present
+      let captcha_token = "";
+      if (typeof turnstile !== "undefined") {
+        const widget = document.querySelector(".cf-turnstile iframe");
+        captcha_token = turnstile.getResponse() || "";
+      }
+
+      if (!username || !email || !password) {
+        showMsg("msg-register", "All fields are required.", false);
         btn.disabled = false;
         return;
       }
@@ -136,7 +212,7 @@
         const res = await fetch("/auth/register", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({username, email, display_name}),
+          body: JSON.stringify({username, email, password, display_name, captcha_token}),
         });
         const data = await res.json();
         if (data.ok) {
@@ -146,10 +222,11 @@
           }
         } else {
           showMsg("msg-register", data.error || "Registration failed.", false);
-          // If email already exists and unverified, hint to use resend tab
           if (data.error && data.error.includes("already")) {
-            $("msg-register").innerHTML += `<br><span style="color:#7a8ba0;font-size:0.85rem;">Already signed up? Try the <a href="#" onclick="showTab('resend');return false" style="color:#6dd5fa;">Resend</a> or <a href="#" onclick="showTab('login');return false" style="color:#6dd5fa;">Log In</a> tab.</span>`;
+            $("msg-register").innerHTML += `<br><span style="color:#7a8ba0;font-size:0.85rem;">Try <a href="#" onclick="showTab('login');return false" style="color:#6dd5fa;">logging in</a> instead.</span>`;
           }
+          // Reset captcha
+          if (typeof turnstile !== "undefined") turnstile.reset();
         }
       } catch {
         showMsg("msg-register", "Network error — try again.", false);
@@ -157,13 +234,15 @@
       btn.disabled = false;
     }
 
+    // ── Login ──
     async function doLogin() {
       const btn = $("btn-login");
       btn.disabled = true;
-      const email = $("login-email").value.trim().toLowerCase();
+      const username = $("login-user").value.trim();
+      const password = $("login-password").value;
 
-      if (!email) {
-        showMsg("msg-login", "Email is required.", false);
+      if (!username || !password) {
+        showMsg("msg-login", "Username/email and password are required.", false);
         btn.disabled = false;
         return;
       }
@@ -172,13 +251,17 @@
         const res = await fetch("/auth/login", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({email}),
+          body: JSON.stringify({username, password}),
         });
         const data = await res.json();
         if (data.ok) {
-          showMsg("msg-login", data.message, true);
-          if (data.dev_verify_url) {
-            $("msg-login").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Log in now (dev mode)</a>`;
+          showMsg("msg-login",
+            `Logged in as <strong>${data.user.display_name || data.user.username}</strong>! ` +
+            `<a href="/u/${data.user.username}" style="color:#6dd5fa;">Go to your profile →</a>`, true);
+          // Show API key
+          if (data.api_key) {
+            $("login-api-key").textContent = data.api_key;
+            $("login-key-box").style.display = "block";
           }
         } else {
           showMsg("msg-login", data.error || "Login failed.", false);
@@ -189,47 +272,48 @@
       btn.disabled = false;
     }
 
-    async function doResend() {
-      const btn = $("btn-resend");
+    // ── Forgot password / magic link ──
+    async function doForgot() {
+      const btn = $("btn-forgot");
       btn.disabled = true;
-      const email = $("resend-email").value.trim().toLowerCase();
+      const email = $("forgot-email").value.trim().toLowerCase();
 
       if (!email) {
-        showMsg("msg-resend", "Email is required.", false);
+        showMsg("msg-forgot", "Email is required.", false);
         btn.disabled = false;
         return;
       }
 
       try {
-        const res = await fetch("/auth/resend", {
+        const res = await fetch("/auth/magic-link", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({email}),
         });
         const data = await res.json();
         if (data.ok) {
-          showMsg("msg-resend", data.message, true);
+          showMsg("msg-forgot", data.message, true);
           if (data.dev_verify_url) {
-            $("msg-resend").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Verify now (dev mode)</a>`;
+            $("msg-forgot").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Log in now (dev mode)</a>`;
           }
         } else {
-          showMsg("msg-resend", data.error || "Failed.", false);
+          showMsg("msg-forgot", data.error || "Failed.", false);
         }
       } catch {
-        showMsg("msg-resend", "Network error — try again.", false);
+        showMsg("msg-forgot", "Network error — try again.", false);
       }
       btn.disabled = false;
     }
 
-    // Allow Enter key to submit
-    $("reg-email").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
+    // Enter key handlers
+    $("reg-password").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
     $("reg-display").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
-    $("login-email").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
-    $("resend-email").addEventListener("keydown", e => { if (e.key === "Enter") doResend(); });
+    $("login-password").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+    $("forgot-email").addEventListener("keydown", e => { if (e.key === "Enter") doForgot(); });
 
     // Pre-select tab from URL
     if (location.search.includes("login")) showTab("login");
-    else if (location.search.includes("resend")) showTab("resend");
+    else if (location.search.includes("forgot")) showTab("forgot");
   </script>
 </body>
 </html>

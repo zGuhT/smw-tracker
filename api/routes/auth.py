@@ -1,24 +1,32 @@
 """
-Auth routes — passwordless email-based authentication.
+Auth routes — password-based authentication with email verification.
 
-  POST /auth/register   — create account (sends verification email)
-  POST /auth/login      — request magic link (sends login email)
-  GET  /auth/verify     — verify token from email link
-  GET  /auth/me         — get current logged-in user (from cookie)
-  POST /auth/logout     — clear session cookie
+  POST /auth/register       — create account with password
+  POST /auth/login          — login with username/email + password
+  POST /auth/magic-link     — request magic login email (password recovery)
+  POST /auth/resend         — resend verification email
+  GET  /auth/verify         — verify token from email link
+  GET  /auth/me             — get current logged-in user
+  POST /auth/logout         — clear session
+  POST /auth/claim-sessions — assign unclaimed sessions to current user
+  GET  /auth/debug-smtp     — admin diagnostic
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+import os
+
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from core.auth_service import (
     generate_session_token,
     get_user_from_session_token,
     invalidate_session_token,
+    login_with_password,
     register_user,
-    request_login,
+    request_magic_link,
     resend_verification,
+    verify_captcha,
     verify_token,
 )
 
@@ -33,9 +41,21 @@ def _get_current_user(request: Request) -> dict | None:
     return get_user_from_session_token(token)
 
 
+def _set_session_cookie(response, user_id: int):
+    """Set the session cookie on a response."""
+    session_token = generate_session_token(user_id)
+    response.set_cookie(
+        SESSION_COOKIE, session_token,
+        httponly=True, samesite="lax", max_age=30 * 86400,
+    )
+    return response
+
+
+# ── Registration ──
+
 @router.post("/register")
 async def auth_register(request: Request):
-    """Register a new account. Sends verification email."""
+    """Register a new account with password."""
     try:
         body = await request.json()
     except Exception:
@@ -43,10 +63,16 @@ async def auth_register(request: Request):
 
     username = (body.get("username") or "").strip().lower()
     email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
     display_name = body.get("display_name")
+    captcha_token = body.get("captcha_token") or ""
+
+    # Verify captcha (skipped if TURNSTILE_SECRET_KEY not set)
+    if not verify_captcha(captcha_token):
+        return JSONResponse({"error": "Captcha verification failed. Please try again."}, status_code=400)
 
     try:
-        result = register_user(username, email, display_name)
+        result = register_user(username, email, password, display_name)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
 
@@ -58,19 +84,58 @@ async def auth_register(request: Request):
             return JSONResponse({
                 "error": "Account created but verification email failed to send. Contact the admin."
             }, status_code=500)
-        return {"ok": True, "message": "Check your email for a verification link."}
+        return {"ok": True, "message": "Account created! Check your email for a verification link."}
     else:
-        # SMTP not configured — return the token directly (dev mode)
         return {
             "ok": True,
-            "message": "SMTP not configured — verify manually.",
+            "message": "Email not configured — verify manually.",
             "dev_verify_url": f"/auth/verify?token={result['token']}",
         }
 
 
+# ── Login with password ──
+
 @router.post("/login")
 async def auth_login(request: Request):
-    """Request a magic login link via email."""
+    """Login with username/email + password."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    username_or_email = (body.get("username") or body.get("email") or "").strip()
+    password = body.get("password") or ""
+
+    if not username_or_email or not password:
+        return JSONResponse({"error": "Username/email and password are required"}, status_code=400)
+
+    user = login_with_password(username_or_email, password)
+    if not user:
+        return JSONResponse({"error": "Invalid credentials or account not verified"}, status_code=401)
+
+    # Set session cookie
+    session_token = generate_session_token(user["id"])
+    response = JSONResponse({
+        "ok": True,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "display_name": user.get("display_name"),
+        },
+        "api_key": user["api_key"],
+    })
+    response.set_cookie(
+        SESSION_COOKIE, session_token,
+        httponly=True, samesite="lax", max_age=30 * 86400,
+    )
+    return response
+
+
+# ── Magic link (password recovery fallback) ──
+
+@router.post("/magic-link")
+async def auth_magic_link(request: Request):
+    """Send a magic login link via email (for forgotten passwords)."""
     try:
         body = await request.json()
     except Exception:
@@ -80,25 +145,26 @@ async def auth_login(request: Request):
     if not email:
         return JSONResponse({"error": "Email is required"}, status_code=400)
 
-    result = request_login(email)
-    if not result:
-        # Don't reveal whether the email exists
-        return {"ok": True, "message": "If an account exists with that email, a login link has been sent."}
+    result = request_magic_link(email)
+    # Always return success to not reveal whether email exists
+    msg = "If an account exists with that email, a login link has been sent."
 
-    from core.email_service import is_configured, send_login_email
-    if is_configured():
-        sent = send_login_email(result["email"], result["username"], result["token"])
-        if sent:
-            return {"ok": True, "message": "Check your email for a login link."}
+    if result:
+        from core.email_service import is_configured, send_login_email
+        if is_configured():
+            send_login_email(result["email"], result["username"], result["token"])
+            return {"ok": True, "message": msg}
         else:
-            return JSONResponse({"error": "Failed to send email. Check server logs."}, status_code=500)
-    else:
-        return {
-            "ok": True,
-            "message": "Email not configured — use link directly.",
-            "dev_verify_url": f"/auth/verify?token={result['token']}",
-        }
+            return {
+                "ok": True,
+                "message": "Email not configured.",
+                "dev_verify_url": f"/auth/verify?token={result['token']}",
+            }
 
+    return {"ok": True, "message": msg}
+
+
+# ── Resend verification ──
 
 @router.post("/resend")
 async def auth_resend(request: Request):
@@ -113,43 +179,44 @@ async def auth_resend(request: Request):
         return JSONResponse({"error": "Email is required"}, status_code=400)
 
     result = resend_verification(email)
-    if not result:
-        # Don't reveal whether the email exists or is already verified
-        return {"ok": True, "message": "If an unverified account exists with that email, a new verification link has been sent."}
+    msg = "If an unverified account exists with that email, a new verification link has been sent."
 
-    from core.email_service import is_configured, send_verification_email
-    if is_configured():
-        send_verification_email(result["email"], result["username"], result["token"])
-        return {"ok": True, "message": "A new verification link has been sent to your email."}
-    else:
-        return {
-            "ok": True,
-            "message": "SMTP not configured — use link directly.",
-            "dev_verify_url": f"/auth/verify?token={result['token']}",
-        }
+    if result:
+        from core.email_service import is_configured, send_verification_email
+        if is_configured():
+            send_verification_email(result["email"], result["username"], result["token"])
+            return {"ok": True, "message": "A new verification link has been sent to your email."}
+        else:
+            return {
+                "ok": True,
+                "message": "Email not configured.",
+                "dev_verify_url": f"/auth/verify?token={result['token']}",
+            }
 
+    return {"ok": True, "message": msg}
+
+
+# ── Email verification ──
 
 @router.get("/verify")
 async def auth_verify(request: Request, token: str = Query(...)):
-    """Verify a token from a registration or login email.
-
-    On success: sets session cookie and shows the welcome/API key page.
-    """
+    """Verify a token from a registration or login email."""
     user = verify_token(token)
     if not user:
         return HTMLResponse(_error_page("Invalid or expired link",
             "This verification link has expired or was already used. "
-            "Try logging in again to get a new link."), status_code=400)
+            "Try logging in again or resend the verification email."), status_code=400)
 
-    # Set session cookie
     session_token = generate_session_token(user["id"])
     response = HTMLResponse(_welcome_page(user))
     response.set_cookie(
         SESSION_COOKIE, session_token,
-        httponly=True, samesite="lax", max_age=30 * 86400,  # 30 days
+        httponly=True, samesite="lax", max_age=30 * 86400,
     )
     return response
 
+
+# ── Session management ──
 
 @router.get("/me")
 async def auth_me(request: Request):
@@ -168,7 +235,6 @@ async def auth_me(request: Request):
 @router.get("/debug-smtp")
 async def auth_debug_email(request: Request):
     """Debug endpoint — shows email config and user status. Admin only."""
-    import os
     is_local = getattr(request.state, "is_local", False)
     admin_key = os.environ.get("SMW_ADMIN_KEY", "")
     if not is_local and request.query_params.get("admin_key") != admin_key:
@@ -179,7 +245,7 @@ async def auth_debug_email(request: Request):
     c = _cfg()
 
     users = db.fetchall(
-        "SELECT id, username, email, email_verified, verification_token IS NOT NULL AS has_token, created_at FROM users ORDER BY id"
+        "SELECT id, username, email, email_verified, verification_token IS NOT NULL AS has_token, password_hash IS NOT NULL AS has_password, created_at FROM users ORDER BY id"
     )
 
     return {
@@ -187,6 +253,7 @@ async def auth_debug_email(request: Request):
         "RESEND_API_KEY": "set" if c["api_key"] else "(empty)",
         "EMAIL_FROM": c["email_from"],
         "BASE_URL": c["base_url"],
+        "captcha_configured": bool(os.environ.get("TURNSTILE_SECRET_KEY")),
         "users": users,
     }
 
@@ -212,14 +279,12 @@ async def auth_claim_sessions(request: Request):
     from core import db
     from core.time_utils import utc_now_iso
 
-    # Count unclaimed sessions
     count_row = db.fetchone("SELECT COUNT(*) AS c FROM sessions WHERE user_id IS NULL")
     count = count_row["c"] if count_row else 0
 
     if count == 0:
         return {"ok": True, "claimed": 0, "message": "No unclaimed sessions found."}
 
-    # Claim them
     now = utc_now_iso()
     db.execute(
         "UPDATE sessions SET user_id = ?, updated_at = ? WHERE user_id IS NULL",
@@ -237,7 +302,6 @@ async def auth_claim_sessions(request: Request):
 # ── HTML page builders ──
 
 def _welcome_page(user: dict) -> str:
-    """Render the post-verification welcome page with API key."""
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="utf-8">
@@ -288,27 +352,15 @@ def _welcome_page(user: dict) -> str:
         async function claimSessions() {{
           const btn = document.getElementById('btn-claim');
           const msg = document.getElementById('claim-msg');
-          btn.disabled = true;
-          btn.textContent = 'Claiming...';
+          btn.disabled = true; btn.textContent = 'Claiming...';
           try {{
             const res = await fetch('/auth/claim-sessions', {{method: 'POST'}});
             const data = await res.json();
-            if (data.ok) {{
-              msg.style.color = '#4ade80';
-              msg.textContent = data.message;
-              btn.textContent = 'Done!';
-            }} else {{
-              msg.style.color = '#f87171';
-              msg.textContent = data.error || 'Failed';
-              btn.disabled = false;
-              btn.textContent = 'Claim unclaimed sessions';
-            }}
-          }} catch {{
-            msg.style.color = '#f87171';
-            msg.textContent = 'Network error';
-            btn.disabled = false;
-            btn.textContent = 'Claim unclaimed sessions';
-          }}
+            msg.style.color = data.ok ? '#4ade80' : '#f87171';
+            msg.textContent = data.message || data.error || 'Done';
+            if (data.ok) btn.textContent = 'Done!';
+            else {{ btn.disabled = false; btn.textContent = 'Claim unclaimed sessions'; }}
+          }} catch {{ msg.style.color = '#f87171'; msg.textContent = 'Network error'; btn.disabled = false; btn.textContent = 'Claim unclaimed sessions'; }}
         }}
         </script>
       </section>
@@ -335,7 +387,7 @@ def _error_page(title: str, message: str) -> str:
         <div class="card-title" style="color:#f87171;">{title}</div>
         <p>{message}</p>
         <div style="margin-top:1.5rem;">
-          <a href="/auth/page" class="btn" style="display:inline-block;background:#2a3544;color:#e2e8f0;padding:8px 20px;border-radius:6px;text-decoration:none;">
+          <a href="/auth/page" style="display:inline-block;background:#2a3544;color:#e2e8f0;padding:8px 20px;border-radius:6px;text-decoration:none;">
             Try again
           </a>
         </div>
