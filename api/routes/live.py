@@ -89,8 +89,8 @@ async def live_push(request: Request):
             try:
                 _enrich_payload_from_cloud(payload, game_name, int(user_id) if user_id != DEFAULT_USER else None)
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).warning("Payload enrichment failed: %s", exc)
+                import logging, traceback
+                logging.getLogger(__name__).error("Payload enrichment failed: %s\n%s", exc, traceback.format_exc())
 
         live_state.update(payload, user_id=user_id)
 
@@ -125,7 +125,7 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
     Only refreshes when split count changes to avoid hammering the DB every 500ms.
     """
     from core import db
-    from core.smw_levels import resolve_level_name
+    from core.level_names import resolve_level_name
 
     splits = payload.get("splits", [])
     split_count = len(splits)
