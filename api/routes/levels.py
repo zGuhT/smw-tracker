@@ -112,7 +112,10 @@ async def capture_level_id(request: Request, level_db_id: int):
             result = live_state.get_command_result(user_id, cmd_id)
             if result:
                 if result.get("success"):
-                    return {"success": True, "level_id": result["level_id"]}
+                    # Update the level in the cloud DB
+                    from core.level_service import set_level_id_from_hardware
+                    updated = set_level_id_from_hardware(level_db_id, result["level_id"])
+                    return {"success": True, "level_id": result["level_id"], "level": updated}
                 else:
                     raise HTTPException(503, result.get("error", "Capture failed"))
 
