@@ -166,16 +166,16 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
 
         # PB splits
         from core.splits_service import get_pb_run_for_levels, get_best_segments_for_run, get_sum_of_best_for_run
-        pb_splits = get_pb_run_for_levels(game_name, run_level_ids, user_id=user_id)
-        enrichment["pb_splits"] = pb_splits
-        enrichment["pb_total_ms"] = sum(s["split_ms"] for s in pb_splits) if pb_splits else None
+        pb_result = get_pb_run_for_levels(game_name, run_level_ids)
+        enrichment["pb_splits"] = pb_result.get("splits", []) if pb_result else []
+        enrichment["pb_total_ms"] = pb_result["total_ms"] if pb_result else None
 
         # Best segments
-        best_segs = get_best_segments_for_run(game_name, run_level_ids, user_id=user_id)
+        best_segs = get_best_segments_for_run(game_name, run_level_ids)
         enrichment["best_segments"] = {s["level_id"]: s["best_ms"] for s in best_segs}
 
         # Sum of best
-        sob = get_sum_of_best_for_run(game_name, run_level_ids, user_id=user_id)
+        sob = get_sum_of_best_for_run(game_name, run_level_ids)
         enrichment["sum_of_best_ms"] = sob
 
         # Run completion check
