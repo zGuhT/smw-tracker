@@ -1,71 +1,76 @@
 """
-Email service — sends verification and magic link emails via SMTP.
+Email service — sends emails via Resend API (HTTPS).
 
-Configure via environment variables:
-  SMTP_HOST     — SMTP server (e.g. smtp.gmail.com)
-  SMTP_PORT     — SMTP port (default 587 for TLS)
-  SMTP_USER     — SMTP username (usually your email)
-  SMTP_PASS     — SMTP password or app password
-  SMTP_FROM     — From address (defaults to SMTP_USER)
-  BASE_URL      — Public URL of the site (e.g. https://smwtracker.com)
+Environment variables:
+  RESEND_API_KEY  — API key from resend.com (required)
+  EMAIL_FROM      — From address (default: SMW Tracker <noreply@smwtracker.com>)
+  BASE_URL        — Public URL of the site (default: https://smwtracker.com)
 """
 from __future__ import annotations
 
 import logging
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+
+import requests
 
 log = logging.getLogger(__name__)
 
+RESEND_API_URL = "https://api.resend.com/emails"
+DEFAULT_FROM = "SMW Tracker <noreply@smwtracker.com>"
+
 
 def _cfg():
-    """Read SMTP config from environment at call time (not import time)."""
-    host = os.environ.get("SMTP_HOST", "")
-    user = os.environ.get("SMTP_USER", "")
-    pwd = os.environ.get("SMTP_PASS", "")
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    from_addr = os.environ.get("SMTP_FROM", "") or user
-    base_url = os.environ.get("BASE_URL", "https://smwtracker.com").rstrip("/")
-    return host, port, user, pwd, from_addr, base_url
+    """Read config from environment at call time."""
+    return {
+        "api_key": os.environ.get("RESEND_API_KEY", ""),
+        "email_from": os.environ.get("EMAIL_FROM", "") or DEFAULT_FROM,
+        "base_url": os.environ.get("BASE_URL", "https://smwtracker.com").rstrip("/"),
+    }
 
 
 def is_configured() -> bool:
-    """Check if SMTP is configured."""
-    host, _, user, pwd, _, _ = _cfg()
-    return bool(host and user and pwd)
+    """Check if Resend is configured."""
+    return bool(_cfg()["api_key"])
 
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
-    """Send an HTML email. Returns True on success."""
-    host, port, user, pwd, from_addr, _ = _cfg()
-    if not (host and user and pwd):
-        log.warning("SMTP not configured — cannot send email to %s (SMTP_HOST=%r, SMTP_USER=%r, SMTP_PASS=%s)",
-                     to, host, user, "set" if pwd else "empty")
+    """Send an HTML email via Resend API. Returns True on success."""
+    c = _cfg()
+    if not c["api_key"]:
+        log.warning("RESEND_API_KEY not set — cannot send email to %s", to)
         return False
-
-    msg = MIMEMultipart("alternative")
-    msg["From"] = from_addr
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.attach(MIMEText(html_body, "html"))
 
     try:
-        with smtplib.SMTP(host, port, timeout=10) as server:
-            server.starttls()
-            server.login(user, pwd)
-            server.send_message(msg)
-        log.info("Email sent to %s: %s", to, subject)
-        return True
+        resp = requests.post(
+            RESEND_API_URL,
+            headers={
+                "Authorization": f"Bearer {c['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": c["email_from"],
+                "to": [to],
+                "subject": subject,
+                "html": html_body,
+            },
+            timeout=10,
+        )
+        if resp.status_code in (200, 201):
+            log.info("Email sent to %s: %s", to, subject)
+            return True
+        else:
+            log.error("Resend API error %s: %s", resp.status_code, resp.text[:300])
+            return False
     except Exception as exc:
-        log.error("Failed to send email to %s: %s", to, exc)
+        log.error("Resend request failed for %s: %s", to, exc)
         return False
 
 
+# ── Email templates ──
+
 def send_verification_email(to: str, username: str, token: str) -> bool:
-    """Send account verification email with a link."""
-    _, _, _, _, _, base_url = _cfg()
+    """Send account verification email."""
+    base_url = _cfg()["base_url"]
     verify_url = f"{base_url}/auth/verify?token={token}"
     subject = "SMW Tracker — Verify your account"
     html = f"""
@@ -92,7 +97,7 @@ def send_verification_email(to: str, username: str, token: str) -> bool:
 
 def send_login_email(to: str, username: str, token: str) -> bool:
     """Send magic login link email."""
-    _, _, _, _, _, base_url = _cfg()
+    base_url = _cfg()["base_url"]
     login_url = f"{base_url}/auth/verify?token={token}"
     subject = "SMW Tracker — Your login link"
     html = f"""

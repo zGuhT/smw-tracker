@@ -163,8 +163,8 @@ async def auth_me(request: Request):
 
 
 @router.get("/debug-smtp")
-async def auth_debug_smtp(request: Request):
-    """Debug endpoint — shows SMTP config status. Admin only."""
+async def auth_debug_email(request: Request):
+    """Debug endpoint — shows email config status. Admin only."""
     import os
     is_local = getattr(request.state, "is_local", False)
     admin_key = os.environ.get("SMW_ADMIN_KEY", "")
@@ -172,16 +172,13 @@ async def auth_debug_smtp(request: Request):
         return JSONResponse({"error": "Admin only"}, status_code=403)
 
     from core.email_service import is_configured, _cfg
-    host, port, user, pwd, from_addr, base_url = _cfg()
+    c = _cfg()
     return {
         "is_configured": is_configured(),
-        "SMTP_HOST": host or "(empty)",
-        "SMTP_PORT": port,
-        "SMTP_USER": user or "(empty)",
-        "SMTP_PASS": "set" if pwd else "(empty)",
-        "SMTP_FROM": from_addr or "(empty)",
-        "BASE_URL": base_url,
-        "env_keys": sorted([k for k in os.environ if k.startswith("SMTP") or k.startswith("BASE")]),
+        "RESEND_API_KEY": "set" if c["api_key"] else "(empty)",
+        "EMAIL_FROM": c["email_from"],
+        "BASE_URL": c["base_url"],
+        "env_keys": sorted([k for k in os.environ if k.startswith(("RESEND", "EMAIL", "BASE"))]),
     }
 
 
