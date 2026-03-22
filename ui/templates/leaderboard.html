@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Leaderboards — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+  <style>
+    .lb-section { margin-bottom: 24px; }
+    .lb-table { width: 100%; border-collapse: collapse; }
+    .lb-table th { text-align: left; color: var(--muted); font-size: 0.75rem; text-transform: uppercase;
+      padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    .lb-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .lb-table tr:hover { background: var(--panel-2); }
+    .lb-rank { color: var(--muted); font-weight: 600; width: 40px; }
+    .lb-rank-1 { color: #fbbf24; }
+    .lb-rank-2 { color: #94a3b8; }
+    .lb-rank-3 { color: #cd7f32; }
+    .lb-user { font-weight: 600; }
+    .lb-user a { color: var(--text); text-decoration: none; }
+    .lb-user a:hover { color: var(--accent); }
+    .lb-value { font-family: var(--mono); }
+    .lb-tabs { display: flex; gap: 0; margin-bottom: 0; }
+    .lb-tab { padding: 10px 20px; cursor: pointer; background: var(--panel-2); border: 1px solid var(--border);
+      color: var(--muted); font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }
+    .lb-tab:first-child { border-radius: 8px 0 0 0; }
+    .lb-tab:last-child { border-radius: 0 8px 0 0; }
+    .lb-tab.active { background: var(--panel-3); color: var(--accent); border-bottom-color: var(--panel-3); }
+    .lb-panel { background: var(--panel-3); border: 1px solid var(--border); border-top: none;
+      border-radius: 0 0 8px 8px; padding: 20px; }
+    .lb-panel.hidden { display: none; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .game-select { padding: 0.5rem 0.8rem; background: var(--panel-1); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.9rem; margin-bottom: 16px; min-width: 200px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/games">Games</a>
+        <a href="/leaderboards" class="active">Leaderboards</a>
+        <a href="/download">Download</a>
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
+        {% else %}
+          <a href="/auth/page">Sign Up / Log In</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    <main>
+      <h2 style="margin-bottom:4px;">Leaderboards</h2>
+      <p class="muted" style="margin-bottom:20px;">Community rankings across all games.</p>
+
+      <div class="lb-tabs">
+        <div class="lb-tab active" onclick="showTab('global')">Global</div>
+        <div class="lb-tab" onclick="showTab('game')">By Game</div>
+      </div>
+
+      <!-- Global Tab -->
+      <div class="lb-panel" id="panel-global">
+        <div class="stat-grid" id="global-totals">
+          <div class="stat-box"><div class="stat-label">Users</div><div class="stat-value" id="gt-users">—</div></div>
+          <div class="stat-box"><div class="stat-label">Sessions</div><div class="stat-value" id="gt-sessions">—</div></div>
+          <div class="stat-box"><div class="stat-label">Games</div><div class="stat-value" id="gt-games">—</div></div>
+          <div class="stat-box"><div class="stat-label">Total Deaths</div><div class="stat-value deaths-color" id="gt-deaths">—</div></div>
+        </div>
+
+        <div class="lb-section">
+          <div class="card-title">Most Active Runners</div>
+          <table class="lb-table"><thead><tr>
+            <th>#</th><th>Runner</th><th>Sessions</th><th>Games</th>
+          </tr></thead><tbody id="lb-active"></tbody></table>
+        </div>
+
+        <div class="lb-section">
+          <div class="card-title">Most Deaths (All Time)</div>
+          <table class="lb-table"><thead><tr>
+            <th>#</th><th>Runner</th><th>Deaths</th><th>Games</th>
+          </tr></thead><tbody id="lb-deaths"></tbody></table>
+        </div>
+
+        <div class="lb-section">
+          <div class="card-title">Most Efficient (Lowest Avg Deaths/Level)</div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:8px;">Minimum 10 splits to qualify</p>
+          <table class="lb-table"><thead><tr>
+            <th>#</th><th>Runner</th><th>Avg Deaths/Level</th><th>Splits</th>
+          </tr></thead><tbody id="lb-efficient"></tbody></table>
+        </div>
+
+        <div class="lb-section">
+          <div class="card-title">Most Popular Games</div>
+          <table class="lb-table"><thead><tr>
+            <th>#</th><th>Game</th><th>Players</th><th>Sessions</th>
+          </tr></thead><tbody id="lb-popular"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Per-Game Tab -->
+      <div class="lb-panel hidden" id="panel-game">
+        <select id="game-select" class="game-select" onchange="loadGameLeaderboard()">
+          <option value="">Select a game...</option>
+        </select>
+
+        <div id="game-lb-content" class="hidden">
+          <div class="lb-section">
+            <div class="card-title">Fastest Times — <span id="game-run-name"></span></div>
+            <table class="lb-table"><thead><tr>
+              <th>#</th><th>Runner</th><th>Time</th><th>Deaths</th><th>Date</th>
+            </tr></thead><tbody id="lb-fastest"></tbody></table>
+            <p id="lb-fastest-empty" class="muted hidden" style="padding:12px;">No completed runs yet for this game.</p>
+          </div>
+
+          <div class="lb-section">
+            <div class="card-title">Death Rankings</div>
+            <table class="lb-table"><thead><tr>
+              <th>#</th><th>Runner</th><th>Total Deaths</th><th>Avg/Level</th><th>Sessions</th>
+            </tr></thead><tbody id="lb-game-deaths"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    function formatMs(ms) {
+      if (ms == null) return "—";
+      const s = Math.floor(ms / 1000), m = Math.floor(s / 60), h = Math.floor(m / 60);
+      const ss = s % 60, mm = m % 60;
+      if (h > 0) return `${h}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+      return `${mm}:${String(ss).padStart(2,"0")}`;
+    }
+
+    function rankCls(i) {
+      if (i === 0) return "lb-rank lb-rank-1";
+      if (i === 1) return "lb-rank lb-rank-2";
+      if (i === 2) return "lb-rank lb-rank-3";
+      return "lb-rank";
+    }
+
+    function userLink(u) {
+      const name = u.display_name || u.username;
+      return `<a href="/u/${u.username}">${name}</a>`;
+    }
+
+    function showTab(tab) {
+      for (const t of ["global", "game"]) {
+        const tabEl = document.querySelector(`.lb-tab:nth-child(${t === "global" ? 1 : 2})`);
+        tabEl.classList.toggle("active", t === tab);
+        $(`panel-${t}`).classList.toggle("hidden", t !== tab);
+      }
+    }
+
+    // ── Global Stats ──
+    async function loadGlobal() {
+      try {
+        const res = await fetch("/leaderboard/global");
+        const data = await res.json();
+        const t = data.totals || {};
+        $("gt-users").textContent = (t.total_users || 0).toLocaleString();
+        $("gt-sessions").textContent = (t.total_sessions || 0).toLocaleString();
+        $("gt-games").textContent = (t.total_games || 0).toLocaleString();
+        $("gt-deaths").textContent = (t.total_deaths || 0).toLocaleString();
+
+        $("lb-active").innerHTML = (data.most_active || []).map((u, i) =>
+          `<tr><td class="${rankCls(i)}">${i+1}</td><td class="lb-user">${userLink(u)}</td>
+           <td class="lb-value">${u.session_count}</td><td class="lb-value">${u.games_played}</td></tr>`
+        ).join("") || '<tr><td colspan="4" class="muted">No data yet</td></tr>';
+
+        $("lb-deaths").innerHTML = (data.most_deaths || []).map((u, i) =>
+          `<tr><td class="${rankCls(i)}">${i+1}</td><td class="lb-user">${userLink(u)}</td>
+           <td class="lb-value deaths-color">${(u.total_deaths || 0).toLocaleString()}</td>
+           <td class="lb-value">${u.games_played}</td></tr>`
+        ).join("") || '<tr><td colspan="4" class="muted">No data yet</td></tr>';
+
+        $("lb-efficient").innerHTML = (data.most_efficient || []).map((u, i) =>
+          `<tr><td class="${rankCls(i)}">${i+1}</td><td class="lb-user">${userLink(u)}</td>
+           <td class="lb-value">${u.avg_deaths_per_level}</td>
+           <td class="lb-value">${u.total_splits}</td></tr>`
+        ).join("") || '<tr><td colspan="4" class="muted">Not enough data yet (need 10+ splits)</td></tr>';
+
+        $("lb-popular").innerHTML = (data.popular_games || []).map((g, i) =>
+          `<tr><td class="${rankCls(i)}">${i+1}</td>
+           <td class="lb-user"><a href="/games">${g.game_name}</a></td>
+           <td class="lb-value">${g.player_count}</td>
+           <td class="lb-value">${g.session_count}</td></tr>`
+        ).join("") || '<tr><td colspan="4" class="muted">No data yet</td></tr>';
+      } catch {}
+    }
+
+    // ── Game selector ──
+    async function loadGameList() {
+      try {
+        const res = await fetch("/games/library");
+        const games = await res.json();
+        const select = $("game-select");
+        for (const g of games) {
+          const opt = document.createElement("option");
+          opt.value = g.game_name;
+          opt.textContent = g.display_name || g.game_name;
+          select.appendChild(opt);
+        }
+      } catch {}
+    }
+
+    // ── Per-game leaderboard ──
+    async function loadGameLeaderboard() {
+      const game = $("game-select").value;
+      const content = $("game-lb-content");
+      if (!game) { content.classList.add("hidden"); return; }
+      content.classList.remove("hidden");
+
+      // Fastest times
+      try {
+        const res = await fetch(`/leaderboard/fastest/${encodeURIComponent(game)}`);
+        const data = await res.json();
+        $("game-run-name").textContent = data.run_name || "Default Run";
+        const tbody = $("lb-fastest");
+        const empty = $("lb-fastest-empty");
+        if (!data.times || !data.times.length) {
+          tbody.innerHTML = "";
+          empty.classList.remove("hidden");
+        } else {
+          empty.classList.add("hidden");
+          tbody.innerHTML = data.times.map((t, i) =>
+            `<tr><td class="${rankCls(i)}">${i+1}</td>
+             <td class="lb-user">${userLink(t)}</td>
+             <td class="lb-value accent-color">${formatMs(t.total_ms)}</td>
+             <td class="lb-value deaths-color">${t.total_deaths || 0}</td>
+             <td class="lb-value muted">${(t.start_time || "").substring(0, 10)}</td></tr>`
+          ).join("");
+        }
+      } catch { $("lb-fastest").innerHTML = ""; }
+
+      // Death rankings
+      try {
+        const res = await fetch(`/leaderboard/deaths/${encodeURIComponent(game)}`);
+        const stats = await res.json();
+        $("lb-game-deaths").innerHTML = (stats || []).map((u, i) =>
+          `<tr><td class="${rankCls(i)}">${i+1}</td>
+           <td class="lb-user">${userLink(u)}</td>
+           <td class="lb-value deaths-color">${(u.total_deaths || 0).toLocaleString()}</td>
+           <td class="lb-value">${u.avg_deaths_per_level || "—"}</td>
+           <td class="lb-value">${u.session_count}</td></tr>`
+        ).join("") || '<tr><td colspan="5" class="muted">No data yet</td></tr>';
+      } catch {}
+    }
+
+    // Init
+    loadGlobal();
+    loadGameList();
+  </script>
+</body>
+</html>

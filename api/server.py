@@ -28,6 +28,7 @@ from api.routes.users import router as users_router
 from api.routes.auth import router as auth_router
 from api.routes.community import router as community_router
 from api.routes.games import router as games_router
+from api.routes.leaderboard import router as leaderboard_router
 from core.db import close_thread_connection, init_db
 from ui.routes import router as ui_router
 
@@ -154,4 +155,5 @@ app.include_router(users_router)
 app.include_router(auth_router)
 app.include_router(community_router)
 app.include_router(games_router)
+app.include_router(leaderboard_router)
 app.include_router(ui_router)

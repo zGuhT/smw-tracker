@@ -46,6 +46,12 @@ def games_library_page(request: Request):
     return templates.TemplateResponse("games_library.html", _ctx(request))
 
 
+@router.get("/leaderboards", response_class=HTMLResponse)
+def leaderboards_page(request: Request):
+    """Public leaderboards page."""
+    return templates.TemplateResponse("leaderboard.html", _ctx(request))
+
+
 @router.get("/auth/page", response_class=HTMLResponse)
 def auth_page(request: Request):
     turnstile_key = os.environ.get("TURNSTILE_SITE_KEY", "")

@@ -13,6 +13,7 @@
       <nav>
         <a href="/u/{{ profile_username }}" class="active">{{ profile_display_name }}</a>
         <a href="/games">Games</a>
+        <a href="/leaderboards">Leaderboards</a>
         <a href="/download">Download</a>
         {% if auth_user and auth_user.username == profile_username %}
           <a href="/u/{{ profile_username }}/account">Account</a>

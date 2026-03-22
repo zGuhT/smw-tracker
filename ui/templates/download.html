@@ -13,6 +13,7 @@
       <nav>
         <a href="/">Home</a>
         <a href="/games">Games</a>
+        <a href="/leaderboards">Leaderboards</a>
         <a href="/download" class="active">Download</a>
         {% if auth_user %}
           <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
