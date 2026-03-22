@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Games Library — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+  <style>
+    .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .gl-card { display: flex; flex-direction: column; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+      text-decoration: none; color: var(--text); transition: border-color 0.15s, transform 0.15s; }
+    .gl-card:hover { border-color: var(--accent-dim); transform: translateY(-2px); }
+    .gl-card-art { width: 100%; height: 130px; object-fit: cover; background: var(--panel-3);
+      border-bottom: 1px solid var(--border); }
+    .gl-card-art-placeholder { width: 100%; height: 130px; display: flex; align-items: center;
+      justify-content: center; font-size: 40px; background: var(--panel-3);
+      border-bottom: 1px solid var(--border); opacity: 0.3; }
+    .gl-card-body { padding: 12px 14px; flex: 1; }
+    .gl-card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; line-height: 1.3; }
+    .gl-card-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+    .gl-card-actions { padding: 8px 14px; border-top: 1px solid var(--border); }
+    .gl-stat { display: inline-block; margin-right: 10px; }
+    .search-bar { display: flex; gap: 8px; margin-bottom: 20px; }
+    .search-bar input { flex: 1; padding: 0.6rem 0.8rem; background: var(--panel-1);
+      border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+      font-size: 0.95rem; outline: none; }
+    .search-bar input:focus { border-color: var(--accent-dim); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/games" class="active">Games</a>
+        <a href="/download">Download</a>
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
+        {% else %}
+          <a href="/auth/page">Sign Up / Log In</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    <main>
+      <h2 style="margin-bottom:4px;">Games Library</h2>
+      <p class="muted" style="margin-bottom:20px;">Browse all games with level and run definitions. Add a game to start tracking it.</p>
+
+      <div class="search-bar">
+        <input type="text" id="search" placeholder="Search games..." oninput="filterGames()">
+      </div>
+
+      <div id="games-grid" class="games-grid">
+        <p class="muted">Loading...</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    let allGames = [];
+    const isAuth = {{ is_authenticated | tojson }};
+
+    async function loadGames() {
+      try {
+        const res = await fetch("/games/library");
+        allGames = await res.json();
+        renderGames(allGames);
+      } catch {
+        $("games-grid").innerHTML = '<p class="muted">Failed to load games.</p>';
+      }
+    }
+
+    function renderGames(games) {
+      const container = $("games-grid");
+      if (!games.length) {
+        container.innerHTML = '<p class="muted">No games set up yet. Be the first to add one in the game setup page!</p>';
+        return;
+      }
+      container.innerHTML = games.map(g => {
+        const name = g.display_name || g.game_name;
+        const img = g.boxart_url
+          ? `<img src="${g.boxart_url}" alt="${name}" loading="lazy" class="gl-card-art">`
+          : '<div class="gl-card-art-placeholder">🎮</div>';
+        const players = g.player_count === 1 ? "1 player" : `${g.player_count} players`;
+        const addBtn = isAuth
+          ? `<div class="gl-card-actions">
+              <button onclick="event.preventDefault();addGame('${g.game_name.replace(/'/g, "\\'")}')" class="btn-sm primary" style="width:100%;padding:6px;">
+                Add to My Library
+              </button>
+            </div>`
+          : '';
+        return `<div class="gl-card">
+          <a href="/game/${encodeURIComponent(g.game_name)}/setup" style="text-decoration:none;color:inherit;">
+            ${img}
+            <div class="gl-card-body">
+              <div class="gl-card-title">${name}</div>
+              <div class="gl-card-meta">
+                <span class="gl-stat">${g.level_count} levels</span>
+                <span class="gl-stat">${g.run_count} runs</span><br>
+                <span class="gl-stat">${players}</span>
+                <span class="gl-stat">${g.session_count} sessions</span>
+                ${g.config_count > 0 ? `<span class="gl-stat" style="color:#4ade80;">✓ ${g.config_count} config${g.config_count > 1 ? 's' : ''}</span>` : ''}
+              </div>
+            </div>
+          </a>
+          ${addBtn}
+        </div>`;
+      }).join("");
+    }
+
+    function filterGames() {
+      const q = $("search").value.trim().toLowerCase();
+      if (!q) { renderGames(allGames); return; }
+      const filtered = allGames.filter(g =>
+        g.game_name.toLowerCase().includes(q) ||
+        (g.display_name || "").toLowerCase().includes(q)
+      );
+      renderGames(filtered);
+    }
+
+    async function addGame(gameName) {
+      try {
+        const res = await fetch("/games/add-to-profile", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({game_name: gameName}),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          alert(data.message);
+        } else {
+          alert(data.error || "Failed to add game");
+        }
+      } catch {
+        alert("Network error");
+      }
+    }
+
+    loadGames();
+  </script>
+</body>
+</html>

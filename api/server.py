@@ -27,6 +27,7 @@ from api.routes.live import router as live_router
 from api.routes.users import router as users_router
 from api.routes.auth import router as auth_router
 from api.routes.community import router as community_router
+from api.routes.games import router as games_router
 from core.db import close_thread_connection, init_db
 from ui.routes import router as ui_router
 
@@ -100,7 +101,7 @@ class PublicAccessMiddleware(BaseHTTPMiddleware):
             if is_authenticated and any(path.startswith(p) for p in (
                 "/levels/", "/runs/", "/export/", "/run/",
                 "/session/", "/tracking/", "/community/",
-                "/live/command/",
+                "/live/command/", "/games/",
             )):
                 return await call_next(request)
             return JSONResponse({"error": "Read-only access — log in to make changes"}, status_code=403)
@@ -152,4 +153,5 @@ app.include_router(live_router)
 app.include_router(users_router)
 app.include_router(auth_router)
 app.include_router(community_router)
+app.include_router(games_router)
 app.include_router(ui_router)

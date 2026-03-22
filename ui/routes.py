@@ -40,6 +40,12 @@ def download_page(request: Request):
     return templates.TemplateResponse("download.html", _ctx(request))
 
 
+@router.get("/games", response_class=HTMLResponse)
+def games_library_page(request: Request):
+    """Public games library — browse all games."""
+    return templates.TemplateResponse("games_library.html", _ctx(request))
+
+
 @router.get("/auth/page", response_class=HTMLResponse)
 def auth_page(request: Request):
     turnstile_key = os.environ.get("TURNSTILE_SITE_KEY", "")

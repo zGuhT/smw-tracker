@@ -17,6 +17,7 @@
         {% else %}
           <a href="/">Home</a>
         {% endif %}
+        <a href="/games">Games</a>
         <a href="/download">Download</a>
         {% if is_local %}<a href="/overlay" target="_blank">Overlay</a>{% endif %}
         {% if is_local or is_authenticated %}<a href="/game/{{ game_name }}/setup">Setup</a>{% endif %}
