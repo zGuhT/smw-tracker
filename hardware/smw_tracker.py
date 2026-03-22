@@ -224,7 +224,7 @@ class SMWTracker:
             else:
                 # Also try direct stop in case of stale state
                 from core.session_service import stop_active_session
-                if stop_active_session():
+                if stop_active_session(user_id=self.client.user_id):
                     log.info("Stopped stale active session (direct)")
         except Exception as exc:
             log.warning("Failed to stop session: %s", exc)
@@ -238,7 +238,9 @@ class SMWTracker:
             # Different game or no session — create one
             from core.session_service import get_or_create_active_session
             run_def_id = self.active_run.get("id") if self.active_run else None
-            get_or_create_active_session(game_name=game_name, platform="SNES", run_definition_id=run_def_id)
+            get_or_create_active_session(game_name=game_name, platform="SNES",
+                                         run_definition_id=run_def_id,
+                                         user_id=self.client.user_id)
         except Exception as exc:
             log.warning("Failed to ensure session: %s", exc)
 

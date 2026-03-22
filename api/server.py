@@ -24,6 +24,7 @@ from api.routes.runs import router as runs_router
 from api.routes.export import router as export_router
 from api.routes.run_control import router as run_control_router
 from api.routes.live import router as live_router
+from api.routes.users import router as users_router
 from core.db import close_thread_connection, init_db
 from ui.routes import router as ui_router
 
@@ -108,4 +109,5 @@ app.include_router(runs_router)
 app.include_router(export_router)
 app.include_router(run_control_router)
 app.include_router(live_router)
+app.include_router(users_router)
 app.include_router(ui_router)

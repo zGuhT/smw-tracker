@@ -14,6 +14,25 @@ import os
 import sys
 
 
+def _resolve_local_user_id(api_key: str | None) -> int | None:
+    """Resolve a user_id for the local tracker.
+
+    Looks up by API key first, then falls back to the default user.
+    Returns None if the users table doesn't exist yet (fresh install).
+    """
+    try:
+        from core.user_service import get_or_create_default_user, get_user_by_api_key
+        if api_key:
+            user = get_user_by_api_key(api_key)
+            if user:
+                return user["id"]
+        # Fall back to default user
+        user = get_or_create_default_user()
+        return user["id"]
+    except Exception:
+        return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="SMW Tracker - Hardware Poller")
     parser.add_argument("--http", action="store_true", help="Use HTTP API client")
@@ -41,8 +60,10 @@ def main() -> None:
         from hardware.cloud_client import CloudSyncClient
         init_db()
         api_key = args.api_key or os.environ.get("SMW_API_KEY", "")
-        client = CloudSyncClient(cloud_url=args.cloud_url, api_key=api_key)
-        logging.info("Using cloud sync client → %s", args.cloud_url)
+        # Resolve user_id from API key (or create default user)
+        user_id = _resolve_local_user_id(api_key)
+        client = CloudSyncClient(cloud_url=args.cloud_url, api_key=api_key, user_id=user_id)
+        logging.info("Using cloud sync client → %s (user_id=%s)", args.cloud_url, user_id)
     elif args.http:
         from hardware.tracker_client import HttpApiClient
         client = HttpApiClient(base_url=args.api_url)
@@ -51,8 +72,10 @@ def main() -> None:
         from core.db import init_db
         from hardware.tracker_client import DirectServiceClient
         init_db()
-        client = DirectServiceClient()
-        logging.info("Using direct service client (no HTTP overhead)")
+        # Resolve user for local mode too
+        user_id = _resolve_local_user_id(None)
+        client = DirectServiceClient(user_id=user_id)
+        logging.info("Using direct service client (user_id=%s)", user_id)
 
     qusb = QUsb2SnesClient(url=args.qusb_url, app_name="SMW Tracker")
     qusb.connect()

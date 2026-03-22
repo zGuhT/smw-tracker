@@ -17,6 +17,7 @@ DB_PATH = DATA_DIR / "app.db"
 EXPORT_FILE = BASE_DIR / "data_export.json"
 
 TABLES = [
+    "users",
     "game_metadata",
     "game_levels",
     "run_definitions",

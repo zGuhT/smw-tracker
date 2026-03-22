@@ -255,9 +255,14 @@
       }
     }
 
+    // ── Multi-user support ──
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("user") || "default";
+    const userSuffix = `?user=${encodeURIComponent(userId)}`;
+
     // ── SSE Connection ──
     function connectSSE() {
-      const source = new EventSource("/live/stream");
+      const source = new EventSource(`/live/stream${userSuffix}`);
       source.onmessage = (e) => {
         try { render(JSON.parse(e.data)); } catch {}
       };
@@ -268,11 +273,39 @@
       };
     }
 
+    // ── Active users list ──
+    async function checkActiveUsers() {
+      try {
+        const res = await fetch("/live/active");
+        const users = await res.json();
+        const container = $("live-empty");
+        if (!data || !data.is_active) {
+          if (users.length === 0) {
+            container.innerHTML = '<div class="icon">📡</div><p>No one is playing right now</p>';
+          } else if (users.length === 1 && !params.has("user")) {
+            // Auto-redirect to the only active user
+            const uid = users[0].user_id;
+            window.location.replace(`/live?user=${uid}`);
+            return;
+          } else {
+            let html = '<div class="icon">📡</div><p>Choose a stream:</p><div style="margin-top:1rem">';
+            for (const u of users) {
+              html += `<a href="/live?user=${encodeURIComponent(u.user_id)}" class="btn" style="display:block;margin:0.5rem 0;text-align:center">${u.game_name || "Unknown"} <span class="muted">(${u.user_id})</span></a>`;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+          }
+        }
+      } catch {}
+    }
+
     // ── Init ──
-    // Fetch initial state, then connect SSE
-    fetch("/live/state").then(r => r.json()).then(render).catch(() => {});
+    fetch(`/live/state${userSuffix}`).then(r => r.json()).then(render).catch(() => {});
     connectSSE();
     setInterval(tickTimer, 100);
+    // Check for active users every 10s when idle
+    checkActiveUsers();
+    setInterval(() => { if (!data || !data.is_active) checkActiveUsers(); }, 10000);
   </script>
 </body>
 </html>

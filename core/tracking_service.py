@@ -27,8 +27,9 @@ def record_event(
     level_name: str | None = None,
     x_position: int | None = None,
     details: dict[str, Any] | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_or_create_active_session(game_name=game_name)
+    session = get_or_create_active_session(game_name=game_name, user_id=user_id)
     session_id = session["id"]
     now = utc_now_iso()
 
@@ -64,8 +65,9 @@ def record_progress(
     level_id: str | None = None,
     level_name: str | None = None,
     x_position: int | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_or_create_active_session(game_name=game_name)
+    session = get_or_create_active_session(game_name=game_name, user_id=user_id)
     session_id = session["id"]
     now = utc_now_iso()
 

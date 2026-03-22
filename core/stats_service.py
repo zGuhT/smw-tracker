@@ -1,15 +1,16 @@
 """
 Stats queries — all aggregation pushed to SQL.
 Includes per-game detail queries for the game detail page.
-f"""
+"""
 from __future__ import annotations
 
 from typing import Any
 
 from core import db
+from core.time_utils import utc_now_iso
 
 _DUR = db.duration_sql()
-from core.time_utils import utc_now_iso
+_DATE = db.date_sql()
 
 
 def get_most_played_games() -> list[dict[str, Any]]:
@@ -34,11 +35,11 @@ def get_playtime_trend() -> list[dict[str, Any]]:
     return db.fetchall(
         f"""
         SELECT
-            DATE(start_time) AS date,
+            {_DATE} AS date,
             SUM({_DUR})
                 AS total_playtime_seconds
         FROM sessions
-        GROUP BY DATE(start_time)
+        GROUP BY {_DATE}
         ORDER BY date
         """,
         (now,),
@@ -48,9 +49,9 @@ def get_playtime_trend() -> list[dict[str, Any]]:
 def get_sessions_per_day() -> list[dict[str, Any]]:
     return db.fetchall(
         f"""
-        SELECT DATE(start_time) AS date, COUNT(*) AS session_count
+        SELECT {_DATE} AS date, COUNT(*) AS session_count
         FROM sessions
-        GROUP BY DATE(start_time)
+        GROUP BY {_DATE}
         ORDER BY date
         """
     )
@@ -194,12 +195,12 @@ def get_game_playtime_trend(game_name: str) -> list[dict[str, Any]]:
     return db.fetchall(
         f"""
         SELECT
-            DATE(start_time) AS date,
+            {_DATE} AS date,
             SUM({_DUR})
                 AS total_playtime_seconds
         FROM sessions
         WHERE game_name = ?
-        GROUP BY DATE(start_time)
+        GROUP BY {_DATE}
         ORDER BY date
         """,
         (now, game_name),

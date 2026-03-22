@@ -21,11 +21,32 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 USE_POSTGRES = DATABASE_URL.startswith("postgres")
 
 
+def _pg_ts(expr: str) -> str:
+    """Wrap a column or expression for safe Postgres timestamp casting.
+
+    ISO strings with 'Z' suffix (e.g. '2025-01-01T00:00:00Z') cannot be
+    cast directly with ``::timestamp``.  ``::timestamptz`` handles both
+    'Z' and '+00:00' suffixes correctly.
+    """
+    return f"{expr}::timestamptz"
+
+
 def duration_sql(start_col: str = "start_time", end_expr: str = "COALESCE(end_time, ?)") -> str:
     """Return SQL expression for duration in seconds, compatible with both SQLite and Postgres."""
     if USE_POSTGRES:
-        return f"EXTRACT(EPOCH FROM ({end_expr}::timestamp - {start_col}::timestamp))::integer"
+        return f"EXTRACT(EPOCH FROM ({_pg_ts(end_expr)} - {_pg_ts(start_col)}))::integer"
     return f"CAST((julianday({end_expr}) - julianday({start_col})) * 86400 AS INTEGER)"
+
+
+def date_sql(col: str = "start_time") -> str:
+    """Return SQL expression to extract a date string from a timestamp column.
+
+    SQLite: ``DATE(col)`` works on ISO-8601 text.
+    Postgres: cast to ``timestamptz`` first (handles Z suffix), then to ``date``.
+    """
+    if USE_POSTGRES:
+        return f"({_pg_ts(col)})::date"
+    return f"DATE({col})"
 
 _local = threading.local()
 
@@ -34,12 +55,15 @@ _local = threading.local()
 if USE_POSTGRES:
     import psycopg2
     import psycopg2.extras
+    import psycopg2.errors
 
     def get_connection():
         conn = getattr(_local, "conn", None)
         if conn is not None:
             try:
-                conn.execute("SELECT 1") if hasattr(conn, 'execute') else None
+                # Check if connection is still alive
+                if conn.closed:
+                    raise Exception("closed")
                 cur = conn.cursor()
                 cur.execute("SELECT 1")
                 cur.close()
@@ -49,6 +73,7 @@ if USE_POSTGRES:
                     conn.close()
                 except Exception:
                     pass
+                _local.conn = None
         conn = psycopg2.connect(DATABASE_URL)
         conn.autocommit = False
         _local.conn = conn
@@ -65,9 +90,15 @@ if USE_POSTGRES:
 
     def execute(sql: str, params: tuple[Any, ...] = ()):
         conn = get_connection()
-        cur = conn.cursor()
-        cur.execute(_pg_sql(sql), params)
-        return cur
+        try:
+            cur = conn.cursor()
+            cur.execute(_pg_sql(sql), params)
+            return cur
+        except psycopg2.errors.InFailedSqlTransaction:
+            conn.rollback()
+            cur = conn.cursor()
+            cur.execute(_pg_sql(sql), params)
+            return cur
 
     def executemany(sql: str, seq: list[tuple[Any, ...]]):
         conn = get_connection()
@@ -78,19 +109,35 @@ if USE_POSTGRES:
 
     def fetchone(sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
         conn = get_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(_pg_sql(sql), params)
-        row = cur.fetchone()
-        cur.close()
-        return dict(row) if row else None
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(_pg_sql(sql), params)
+            row = cur.fetchone()
+            cur.close()
+            return dict(row) if row else None
+        except psycopg2.errors.InFailedSqlTransaction:
+            conn.rollback()
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(_pg_sql(sql), params)
+            row = cur.fetchone()
+            cur.close()
+            return dict(row) if row else None
 
     def fetchall(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         conn = get_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(_pg_sql(sql), params)
-        rows = cur.fetchall()
-        cur.close()
-        return [dict(r) for r in rows]
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(_pg_sql(sql), params)
+            rows = cur.fetchall()
+            cur.close()
+            return [dict(r) for r in rows]
+        except psycopg2.errors.InFailedSqlTransaction:
+            conn.rollback()
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(_pg_sql(sql), params)
+            rows = cur.fetchall()
+            cur.close()
+            return [dict(r) for r in rows]
 
     def commit() -> None:
         get_connection().commit()
@@ -149,8 +196,16 @@ else:
 # ── Schema init ──
 
 _TABLES_SQL_SQLITE = """
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT,
+        api_key TEXT UNIQUE,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
         game_name TEXT NOT NULL, platform TEXT,
         start_time TEXT NOT NULL, end_time TEXT,
         is_active INTEGER NOT NULL DEFAULT 1,
@@ -235,8 +290,16 @@ _TABLES_SQL_SQLITE = """
 """
 
 _TABLES_SQL_POSTGRES = """
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT,
+        api_key TEXT UNIQUE,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
         id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
         game_name TEXT NOT NULL, platform TEXT,
         start_time TEXT NOT NULL, end_time TEXT,
         is_active INTEGER NOT NULL DEFAULT 1,
@@ -316,6 +379,7 @@ _TABLES_SQL_POSTGRES = """
     CREATE INDEX IF NOT EXISTS idx_game_levels_game ON game_levels(game_name);
     CREATE INDEX IF NOT EXISTS idx_run_definitions_game ON run_definitions(game_name);
     CREATE INDEX IF NOT EXISTS idx_run_levels_run ON run_levels(run_definition_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 """
 
 
@@ -340,6 +404,8 @@ def insert_returning_id(sql: str, params: tuple[Any, ...] = ()) -> int | None:
 
 def init_db() -> None:
     if USE_POSTGRES:
+        import logging
+        log = logging.getLogger(__name__)
         conn = get_connection()
         cur = conn.cursor()
         # Execute each statement separately for PostgreSQL
@@ -348,11 +414,33 @@ def init_db() -> None:
             if stmt:
                 try:
                     cur.execute(stmt)
-                except Exception:
+                except psycopg2.errors.DuplicateTable:
                     conn.rollback()
                     cur = conn.cursor()
-                    continue
+                except psycopg2.errors.DuplicateObject:
+                    # Index already exists
+                    conn.rollback()
+                    cur = conn.cursor()
+                except Exception as exc:
+                    log.warning("init_db statement failed: %s — %s", stmt[:60], exc)
+                    conn.rollback()
+                    cur = conn.cursor()
         conn.commit()
+        cur.close()
+
+        # Safe column migrations for existing Postgres DBs
+        _pg_migrations = [
+            "ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id)",
+        ]
+        cur = conn.cursor()
+        for migration in _pg_migrations:
+            try:
+                cur.execute(migration)
+                conn.commit()
+            except psycopg2.errors.DuplicateColumn:
+                conn.rollback()
+            except Exception:
+                conn.rollback()
         cur.close()
     else:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -361,6 +449,7 @@ def init_db() -> None:
         # Safe column migrations for older SQLite DBs
         for migration in [
             "ALTER TABLE sessions ADD COLUMN run_definition_id INTEGER",
+            "ALTER TABLE sessions ADD COLUMN user_id INTEGER",
             "ALTER TABLE game_metadata ADD COLUMN developer TEXT",
             "ALTER TABLE game_metadata ADD COLUMN publisher TEXT",
             "ALTER TABLE game_metadata ADD COLUMN players TEXT",
@@ -372,4 +461,9 @@ def init_db() -> None:
                 conn.execute(migration)
             except Exception:
                 pass
+        # Create indexes that depend on migrated columns
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
+        except Exception:
+            pass
         conn.commit()

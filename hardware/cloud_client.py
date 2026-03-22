@@ -32,8 +32,10 @@ class CloudSyncClient(TrackerClient):
         cloud_url: str = "https://smwtracker.com",
         api_key: str = "",
         push_interval: float = 0.5,
+        user_id: int | None = None,
     ) -> None:
-        self._local = DirectServiceClient()
+        super().__init__(user_id=user_id)
+        self._local = DirectServiceClient(user_id=user_id)
         self._cloud_url = cloud_url.rstrip("/")
         self._api_key = api_key
         self._push_interval = push_interval
@@ -48,7 +50,8 @@ class CloudSyncClient(TrackerClient):
         # Start background push thread
         self._thread = threading.Thread(target=self._push_loop, daemon=True, name="cloud-sync")
         self._thread.start()
-        log.info("Cloud sync started → %s (interval=%.1fs)", self._cloud_url, self._push_interval)
+        log.info("Cloud sync started → %s (interval=%.1fs, user_id=%s)",
+                 self._cloud_url, self._push_interval, self.user_id)
 
     # ── TrackerClient interface (all go to local first) ──
 
@@ -89,6 +92,7 @@ class CloudSyncClient(TrackerClient):
         """Push the full session state to the cloud every push_interval seconds."""
         push_url = f"{self._cloud_url}/live/push"
         consecutive_errors = 0
+        last_payload_hash: int | None = None
 
         while self._running:
             try:
@@ -100,12 +104,21 @@ class CloudSyncClient(TrackerClient):
                 from core.session_service import get_current_session_payload
                 payload = get_current_session_payload()
 
+                # Skip push if payload hasn't changed (reduces bandwidth)
+                payload_hash = hash(json.dumps(payload, sort_keys=True, default=str))
+                if payload_hash == last_payload_hash and consecutive_errors == 0:
+                    continue
+
                 # Push to cloud
                 resp = self._session.post(push_url, json=payload, timeout=5)
                 if resp.status_code == 200:
                     if consecutive_errors > 0:
-                        log.info("Cloud sync restored")
+                        log.info("Cloud sync restored after %d errors", consecutive_errors)
                     consecutive_errors = 0
+                    last_payload_hash = payload_hash
+                elif resp.status_code == 401:
+                    log.error("Cloud push rejected: invalid API key")
+                    consecutive_errors += 1
                 else:
                     consecutive_errors += 1
                     if consecutive_errors <= 3:
@@ -115,13 +128,18 @@ class CloudSyncClient(TrackerClient):
                 consecutive_errors += 1
                 if consecutive_errors == 1:
                     log.warning("Cloud unreachable, will retry...")
-                if consecutive_errors > 10:
-                    time.sleep(5)  # Back off if cloud is down
+                # Exponential backoff: 1s, 2s, 4s, ... up to 30s
+                if consecutive_errors > 3:
+                    backoff = min(30, 2 ** (consecutive_errors - 3))
+                    time.sleep(backoff)
             except Exception as exc:
                 consecutive_errors += 1
                 if consecutive_errors <= 3:
                     log.warning("Cloud sync error: %s", exc)
 
     def stop(self) -> None:
+        """Stop the sync thread and push final state."""
         self._running = False
         self._force_push.set()
+        # Wait briefly for the thread to do a final push
+        self._thread.join(timeout=2.0)

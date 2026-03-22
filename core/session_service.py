@@ -8,28 +8,52 @@ from core.level_names import resolve_level_name, resolve_split_names
 from core.time_utils import duration_seconds, utc_now_iso
 
 
-def close_existing_active_sessions() -> None:
+# ── Helpers for user-scoped queries ──
+
+def _user_filter(user_id: int | None) -> tuple[str, tuple]:
+    """Return a SQL fragment and params for optional user_id filtering."""
+    if user_id is not None:
+        return "AND user_id = ?", (user_id,)
+    return "", ()
+
+
+def close_existing_active_sessions(user_id: int | None = None) -> None:
     now = utc_now_iso()
-    db.execute("UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE is_active = 1", (now, now))
+    uf, up = _user_filter(user_id)
+    db.execute(
+        f"UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE is_active = 1 {uf}",
+        (now, now) + up,
+    )
     db.commit()
 
 
-def start_session(game_name: str, platform: str = "SNES", run_definition_id: int | None = None) -> dict[str, Any]:
+def start_session(game_name: str, platform: str = "SNES",
+                  run_definition_id: int | None = None,
+                  user_id: int | None = None) -> dict[str, Any]:
     now = utc_now_iso()
-    db.execute("UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE is_active = 1", (now, now))
+    # Close any active sessions for this user (or all if user_id is None)
+    uf, up = _user_filter(user_id)
+    db.execute(
+        f"UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE is_active = 1 {uf}",
+        (now, now) + up,
+    )
     session_id = db.insert_returning_id(
-        """INSERT INTO sessions (game_name, platform, start_time, end_time, is_active,
+        """INSERT INTO sessions (user_id, game_name, platform, start_time, end_time, is_active,
                                 last_event_time, run_definition_id, created_at, updated_at)
-        VALUES (?, ?, ?, NULL, 1, ?, ?, ?, ?)""",
-        (game_name, platform, now, now, run_definition_id, now, now),
+        VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?, ?)""",
+        (user_id, game_name, platform, now, now, run_definition_id, now, now),
     )
     db.commit()
     return db.fetchone("SELECT * FROM sessions WHERE id = ?", (session_id,)) or {}
 
 
-def stop_active_session() -> bool:
+def stop_active_session(user_id: int | None = None) -> bool:
     now = utc_now_iso()
-    active = db.fetchone("SELECT id FROM sessions WHERE is_active = 1 ORDER BY id DESC LIMIT 1")
+    uf, up = _user_filter(user_id)
+    active = db.fetchone(
+        f"SELECT id FROM sessions WHERE is_active = 1 {uf} ORDER BY id DESC LIMIT 1",
+        up,
+    )
     if not active:
         return False
     db.execute("UPDATE sessions SET end_time = ?, is_active = 0, updated_at = ? WHERE id = ?",
@@ -38,8 +62,12 @@ def stop_active_session() -> bool:
     return True
 
 
-def get_active_session() -> dict[str, Any] | None:
-    return db.fetchone("SELECT * FROM sessions WHERE is_active = 1 ORDER BY id DESC LIMIT 1")
+def get_active_session(user_id: int | None = None) -> dict[str, Any] | None:
+    uf, up = _user_filter(user_id)
+    return db.fetchone(
+        f"SELECT * FROM sessions WHERE is_active = 1 {uf} ORDER BY id DESC LIMIT 1",
+        up,
+    )
 
 
 def touch_active_session(session_id: int) -> None:
@@ -48,20 +76,23 @@ def touch_active_session(session_id: int) -> None:
     db.commit()
 
 
-def get_or_create_active_session(game_name: str, platform: str = "SNES", run_definition_id: int | None = None) -> dict[str, Any]:
-    active = get_active_session()
+def get_or_create_active_session(game_name: str, platform: str = "SNES",
+                                 run_definition_id: int | None = None,
+                                 user_id: int | None = None) -> dict[str, Any]:
+    active = get_active_session(user_id=user_id)
     if active:
         # Update run_definition_id if not set yet
         if run_definition_id and not active.get("run_definition_id"):
             db.execute("UPDATE sessions SET run_definition_id = ? WHERE id = ?", (run_definition_id, active["id"]))
             db.commit()
         return active
-    return start_session(game_name=game_name, platform=platform, run_definition_id=run_definition_id)
+    return start_session(game_name=game_name, platform=platform,
+                         run_definition_id=run_definition_id, user_id=user_id)
 
 
-def get_current_session_payload() -> dict[str, Any]:
+def get_current_session_payload(user_id: int | None = None) -> dict[str, Any]:
     """Build full session response with resolved names and run definition levels."""
-    active = get_active_session()
+    active = get_active_session(user_id=user_id)
 
     if not active:
         return {
