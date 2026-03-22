@@ -1,6 +1,6 @@
 """API routes for game level definitions."""
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from core.level_service import (
     create_level, delete_level, get_levels_for_game, update_level,
