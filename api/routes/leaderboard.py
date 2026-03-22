@@ -82,7 +82,7 @@ def death_rankings(game_name: str, limit: int = Query(25, ge=1, le=100)):
         """SELECT s.user_id, u.username, u.display_name,
                   COUNT(DISTINCT s.id) AS session_count,
                   SUM(ls.death_count) AS total_deaths,
-                  ROUND(CAST(SUM(ls.death_count) AS FLOAT) /
+                  ROUND(CAST(SUM(ls.death_count) AS NUMERIC) /
                         NULLIF(COUNT(ls.id), 0), 1) AS avg_deaths_per_level
            FROM sessions s
            JOIN users u ON u.id = s.user_id
@@ -99,69 +99,92 @@ def death_rankings(game_name: str, limit: int = Query(25, ge=1, le=100)):
 @router.get("/global")
 def global_stats():
     """Global platform stats and user rankings."""
+    import logging
+    log = logging.getLogger(__name__)
+
     # Overall stats
-    totals = db.fetchone("""
-        SELECT
-            (SELECT COUNT(*) FROM users WHERE email_verified = 1 AND username != 'default') AS total_users,
-            (SELECT COUNT(*) FROM sessions WHERE user_id IS NOT NULL) AS total_sessions,
-            (SELECT COUNT(DISTINCT game_name) FROM sessions WHERE user_id IS NOT NULL) AS total_games,
-            (SELECT COUNT(*) FROM game_events WHERE event_type = 'death') AS total_deaths
-    """)
+    try:
+        totals = db.fetchone("""
+            SELECT
+                (SELECT COUNT(*) FROM users WHERE email_verified = 1 AND username != 'default') AS total_users,
+                (SELECT COUNT(*) FROM sessions WHERE user_id IS NOT NULL) AS total_sessions,
+                (SELECT COUNT(DISTINCT game_name) FROM sessions WHERE user_id IS NOT NULL) AS total_games,
+                (SELECT COUNT(*) FROM game_events WHERE event_type = 'death') AS total_deaths
+        """)
+    except Exception as e:
+        log.error("Global totals query failed: %s", e)
+        totals = {"total_users": 0, "total_sessions": 0, "total_games": 0, "total_deaths": 0}
 
     # Most active users (by session count)
-    most_active = db.fetchall("""
-        SELECT s.user_id, u.username, u.display_name,
-               COUNT(*) AS session_count,
-               COUNT(DISTINCT s.game_name) AS games_played
-        FROM sessions s
-        JOIN users u ON u.id = s.user_id
-        WHERE s.user_id IS NOT NULL AND u.email_verified = 1 AND u.username != 'default'
-        GROUP BY s.user_id, u.username, u.display_name
-        ORDER BY session_count DESC
-        LIMIT 10
-    """)
+    try:
+        most_active = db.fetchall("""
+            SELECT s.user_id, u.username, u.display_name,
+                   COUNT(*) AS session_count,
+                   COUNT(DISTINCT s.game_name) AS games_played
+            FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.user_id IS NOT NULL AND u.email_verified = 1 AND u.username != 'default'
+            GROUP BY s.user_id, u.username, u.display_name
+            ORDER BY session_count DESC
+            LIMIT 10
+        """)
+    except Exception as e:
+        log.error("Most active query failed: %s", e)
+        most_active = []
 
     # Most deaths (total across all games)
-    most_deaths = db.fetchall("""
-        SELECT s.user_id, u.username, u.display_name,
-               SUM(ls.death_count) AS total_deaths,
-               COUNT(DISTINCT s.game_name) AS games_played
-        FROM sessions s
-        JOIN users u ON u.id = s.user_id
-        JOIN level_splits ls ON ls.session_id = s.id
-        WHERE s.user_id IS NOT NULL AND u.email_verified = 1
-        GROUP BY s.user_id, u.username, u.display_name
-        ORDER BY total_deaths DESC
-        LIMIT 10
-    """)
+    try:
+        most_deaths = db.fetchall("""
+            SELECT s.user_id, u.username, u.display_name,
+                   SUM(ls.death_count) AS total_deaths,
+                   COUNT(DISTINCT s.game_name) AS games_played
+            FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            JOIN level_splits ls ON ls.session_id = s.id
+            WHERE s.user_id IS NOT NULL AND u.email_verified = 1
+            GROUP BY s.user_id, u.username, u.display_name
+            ORDER BY total_deaths DESC
+            LIMIT 10
+        """)
+    except Exception as e:
+        log.error("Most deaths query failed: %s", e)
+        most_deaths = []
 
     # Lowest average deaths per level (min 10 splits to qualify)
-    most_efficient = db.fetchall("""
-        SELECT s.user_id, u.username, u.display_name,
-               COUNT(ls.id) AS total_splits,
-               SUM(ls.death_count) AS total_deaths,
-               ROUND(CAST(SUM(ls.death_count) AS FLOAT) / COUNT(ls.id), 2) AS avg_deaths_per_level
-        FROM sessions s
-        JOIN users u ON u.id = s.user_id
-        JOIN level_splits ls ON ls.session_id = s.id
-        WHERE s.user_id IS NOT NULL AND u.email_verified = 1
-        GROUP BY s.user_id, u.username, u.display_name
-        HAVING COUNT(ls.id) >= 10
-        ORDER BY avg_deaths_per_level ASC
-        LIMIT 10
-    """)
+    try:
+        most_efficient = db.fetchall("""
+            SELECT s.user_id, u.username, u.display_name,
+                   COUNT(ls.id) AS total_splits,
+                   SUM(ls.death_count) AS total_deaths,
+                   ROUND(CAST(SUM(ls.death_count) AS NUMERIC) / COUNT(ls.id), 2) AS avg_deaths_per_level
+            FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            JOIN level_splits ls ON ls.session_id = s.id
+            WHERE s.user_id IS NOT NULL AND u.email_verified = 1
+            GROUP BY s.user_id, u.username, u.display_name
+            HAVING COUNT(ls.id) >= 10
+            ORDER BY avg_deaths_per_level ASC
+            LIMIT 10
+        """)
+    except Exception as e:
+        log.error("Most efficient query failed: %s", e)
+        most_efficient = []
 
     # Most played games
-    popular_games = db.fetchall("""
-        SELECT s.game_name,
-               COUNT(DISTINCT s.user_id) AS player_count,
-               COUNT(*) AS session_count
-        FROM sessions s
-        WHERE s.user_id IS NOT NULL
-        GROUP BY s.game_name
-        ORDER BY player_count DESC, session_count DESC
-        LIMIT 10
-    """)
+    try:
+        popular_games = db.fetchall("""
+            SELECT s.game_name,
+                   COUNT(DISTINCT s.user_id) AS player_count,
+                   COUNT(*) AS session_count
+            FROM sessions s
+            WHERE s.user_id IS NOT NULL
+            GROUP BY s.game_name
+            ORDER BY player_count DESC, session_count DESC
+            LIMIT 10
+        """)
+    except Exception as e:
+        log.error("Popular games query failed: %s", e)
+        popular_games = []
 
     return {
         "totals": totals,

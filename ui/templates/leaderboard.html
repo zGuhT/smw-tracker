@@ -190,7 +190,7 @@
            <td class="lb-value">${g.player_count}</td>
            <td class="lb-value">${g.session_count}</td></tr>`
         ).join("") || '<tr><td colspan="4" class="muted">No data yet</td></tr>';
-      } catch {}
+      } catch(e) { console.error("LB error:", e); }
     }
 
     // ── Game selector ──
@@ -205,7 +205,7 @@
           opt.textContent = g.display_name || g.game_name;
           select.appendChild(opt);
         }
-      } catch {}
+      } catch(e) { console.error("LB error:", e); }
     }
 
     // ── Per-game leaderboard ──
@@ -235,7 +235,7 @@
              <td class="lb-value muted">${(t.start_time || "").substring(0, 10)}</td></tr>`
           ).join("");
         }
-      } catch { $("lb-fastest").innerHTML = ""; }
+      } catch(e) { console.error("LB fastest error:", e); $("lb-fastest").innerHTML = ""; }
 
       // Death rankings
       try {
@@ -248,7 +248,7 @@
            <td class="lb-value">${u.avg_deaths_per_level || "—"}</td>
            <td class="lb-value">${u.session_count}</td></tr>`
         ).join("") || '<tr><td colspan="5" class="muted">No data yet</td></tr>';
-      } catch {}
+      } catch(e) { console.error("LB error:", e); }
     }
 
     // Init

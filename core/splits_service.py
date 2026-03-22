@@ -42,7 +42,7 @@ def get_sum_of_best(game_name: str) -> int:
     row = db.fetchone(
         """SELECT COALESCE(SUM(best_ms), 0) AS sob
            FROM (SELECT MIN(split_ms) AS best_ms FROM level_splits
-                 WHERE game_name = ? GROUP BY level_id)""",
+                 WHERE game_name = ? GROUP BY level_id) sub""",
         (game_name,),
     )
     return row["sob"] if row else 0
@@ -52,7 +52,7 @@ def get_pb_run(game_name: str) -> dict[str, Any] | None:
     max_row = db.fetchone(
         """SELECT MAX(level_count) AS max_levels FROM (
             SELECT COUNT(DISTINCT level_id) AS level_count
-            FROM level_splits WHERE game_name = ? GROUP BY session_id)""",
+            FROM level_splits WHERE game_name = ? GROUP BY session_id) sub""",
         (game_name,),
     )
     if not max_row or not max_row["max_levels"]:
@@ -125,7 +125,7 @@ def get_sum_of_best_for_run(game_name: str, run_level_ids: list[str]) -> int:
     row = db.fetchone(
         f"""SELECT COALESCE(SUM(best_ms), 0) AS sob
            FROM (SELECT MIN(split_ms) AS best_ms FROM level_splits
-                 WHERE game_name = ? AND {in_clause} GROUP BY level_id)""",
+                 WHERE game_name = ? AND {in_clause} GROUP BY level_id) sub""",
         [game_name] + params,
     )
     return row["sob"] if row else 0

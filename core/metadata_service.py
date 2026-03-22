@@ -60,7 +60,7 @@ def get_metadata_by_game_name(game_name: str) -> dict[str, Any] | None:
 
 def get_all_game_metadata() -> list[dict[str, Any]]:
     return db.fetchall(
-        "SELECT * FROM game_metadata GROUP BY rom_name ORDER BY display_name"
+        "SELECT * FROM game_metadata ORDER BY display_name"
     )
 
 

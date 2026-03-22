@@ -105,11 +105,11 @@
         container.innerHTML = sessions.map(s => {
           const dur = formatHours(s.duration_seconds);
           const status = s.is_active
-            ? '<span class="status-badge active">● LIVE</span>'
+            ? ' <span class="status-badge active">● LIVE</span>'
             : '';
           const gameUrl = `${GAME_URL_PREFIX}${encodeURIComponent(s.game_name)}`;
           return `<a href="${gameUrl}" class="recent-run-card">
-            <strong class="accent-color">${s.game_name}</strong> ${status}
+            <span class="recent-run-left"><strong>${s.game_name}</strong>${status}</span>
             <span class="recent-run-meta">${formatDate(s.start_time)} &nbsp; ${dur}</span>
           </a>`;
         }).join("");

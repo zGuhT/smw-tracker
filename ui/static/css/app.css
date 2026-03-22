@@ -627,7 +627,9 @@ button.primary:hover { background: #5bc0e8; }
   padding: 10px 16px; background: var(--panel-2);
   border: 1px solid var(--border); border-radius: var(--radius);
   margin-bottom: 6px; text-decoration: none; color: inherit;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s; gap: 16px;
 }
 .recent-run-card:hover { border-color: var(--accent); }
-.recent-run-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.recent-run-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.recent-run-left strong { color: var(--accent); white-space: nowrap; }
+.recent-run-meta { font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
