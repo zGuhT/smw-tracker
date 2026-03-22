@@ -87,12 +87,15 @@ async def auth_login(request: Request):
 
     from core.email_service import is_configured, send_login_email
     if is_configured():
-        send_login_email(result["email"], result["username"], result["token"])
-        return {"ok": True, "message": "Check your email for a login link."}
+        sent = send_login_email(result["email"], result["username"], result["token"])
+        if sent:
+            return {"ok": True, "message": "Check your email for a login link."}
+        else:
+            return JSONResponse({"error": "Failed to send email. Check server logs."}, status_code=500)
     else:
         return {
             "ok": True,
-            "message": "SMTP not configured — use link directly.",
+            "message": "Email not configured — use link directly.",
             "dev_verify_url": f"/auth/verify?token={result['token']}",
         }
 
@@ -164,7 +167,7 @@ async def auth_me(request: Request):
 
 @router.get("/debug-smtp")
 async def auth_debug_email(request: Request):
-    """Debug endpoint — shows email config status. Admin only."""
+    """Debug endpoint — shows email config and user status. Admin only."""
     import os
     is_local = getattr(request.state, "is_local", False)
     admin_key = os.environ.get("SMW_ADMIN_KEY", "")
@@ -172,13 +175,19 @@ async def auth_debug_email(request: Request):
         return JSONResponse({"error": "Admin only"}, status_code=403)
 
     from core.email_service import is_configured, _cfg
+    from core import db
     c = _cfg()
+
+    users = db.fetchall(
+        "SELECT id, username, email, email_verified, verification_token IS NOT NULL AS has_token, created_at FROM users ORDER BY id"
+    )
+
     return {
         "is_configured": is_configured(),
         "RESEND_API_KEY": "set" if c["api_key"] else "(empty)",
         "EMAIL_FROM": c["email_from"],
         "BASE_URL": c["base_url"],
-        "env_keys": sorted([k for k in os.environ if k.startswith(("RESEND", "EMAIL", "BASE"))]),
+        "users": users,
     }
 
 
