@@ -171,6 +171,8 @@ class CloudSyncClient(TrackerClient):
                 result = self._cmd_start_run(cmd, cmd_id)
             elif cmd_type == "stop_run":
                 result = self._cmd_stop_run(cmd, cmd_id)
+            elif cmd_type == "snes_reset":
+                result = self._cmd_snes_reset(cmd, cmd_id)
             else:
                 result["error"] = f"Unknown command: {cmd_type}"
                 log.warning("Unknown remote command: %s", cmd_type)
@@ -229,3 +231,27 @@ class CloudSyncClient(TrackerClient):
         self._force_push.set()
         log.info("Run stopped via remote command")
         return {"command_id": cmd_id, "type": "stop_run", "success": True}
+
+    def _cmd_snes_reset(self, cmd: dict, cmd_id: str) -> dict:
+        """Soft reset the SNES via QUsb2Snes."""
+        from hardware.qusb_client import QUsb2SnesClient
+        qusb = QUsb2SnesClient()
+        qusb.connect()
+        qusb.auto_attach_first_device(wait=False)
+        # Write to SNES reset vector — $00:FFFC is the reset vector
+        # Writing 0x80 to $002100 (screen display register) triggers a visual reset
+        # The standard approach is to write to the NMI/reset control
+        # For a soft reset via QUsb2Snes, we use the Reset command
+        try:
+            qusb.ws.send(json.dumps({
+                "Opcode": "Reset",
+                "Space": "SNES",
+                "Operands": [],
+            }))
+            # Read response
+            qusb.ws.recv()
+        except Exception:
+            pass
+        qusb.close()
+        log.info("SNES soft reset via remote command")
+        return {"command_id": cmd_id, "type": "snes_reset", "success": True}

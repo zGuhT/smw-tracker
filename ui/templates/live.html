@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <title>SMW Tracker — Live</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="/static/css/app.css" rel="stylesheet">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+  <script src="/static/js/sounds.js?v=2"></script>
 </head>
 <body>
   <div class="page">
@@ -77,16 +78,73 @@
           </div>
 
           <!-- Run Controls (only shown to the session owner) -->
-          <div id="run-controls" class="hidden" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
+          <div id="run-controls" class="hidden" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
             <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-              <button onclick="sendCommand('reset_run')" class="btn-sm" style="background:#f87171;color:#0d1117;border:none;padding:8px 20px;font-weight:600;">
+              <button onclick="sendCommand('reset_run')" class="btn-sm" style="background:#f87171;color:#0d1117;border:none;padding:8px 20px;font-weight:600;" title="Reset run (Numpad 4 or R)">
                 Reset Run
               </button>
-              <button onclick="sendCommand('stop_run')" class="btn-sm" style="background:#2a3544;color:#e2e8f0;border:1px solid #3a4a5a;padding:8px 20px;">
+              <button onclick="sendCommand('stop_run')" class="btn-sm" style="background:#2a3544;color:#e2e8f0;border:1px solid #3a4a5a;padding:8px 20px;" title="Stop session">
                 Stop Session
               </button>
+              <button onclick="toggleSettings()" class="btn-sm" style="background:#2a3544;color:#e2e8f0;border:1px solid #3a4a5a;padding:8px 20px;" title="Settings">
+                ⚙ Settings
+              </button>
             </div>
-            <div id="cmd-msg" style="margin-top:8px;font-size:0.85rem;color:#7a8ba0;"></div>
+            <div id="cmd-msg" style="margin-top:8px;font-size:0.85rem;color:#7a8ba0;text-align:center;"></div>
+
+            <!-- Settings Panel (hidden by default) -->
+            <div id="settings-panel" class="hidden" style="margin-top:16px;padding:16px;background:var(--panel-3);border-radius:8px;">
+
+              <!-- SNES Reset Toggle -->
+              <div style="margin-bottom:16px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#e2e8f0;">
+                  <input type="checkbox" id="opt-snes-reset" onchange="savePrefs()">
+                  <span>Reset SNES on "Reset Run" <span class="muted" style="font-size:0.8rem;">(soft reset)</span></span>
+                </label>
+              </div>
+
+              <!-- Sound Settings -->
+              <div style="color:#6dd5fa;font-weight:600;margin-bottom:8px;font-size:0.85rem;">Sound Alerts</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
+                <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" id="snd-gold" onchange="SFX.saveSettings()"> Gold split
+                  <button onclick="SFX.sounds.gold()" style="background:none;border:none;cursor:pointer;font-size:0.7rem;color:#7a8ba0;">▶</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" id="snd-ahead" onchange="SFX.saveSettings()"> Ahead
+                  <button onclick="SFX.sounds.ahead()" style="background:none;border:none;cursor:pointer;font-size:0.7rem;color:#7a8ba0;">▶</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" id="snd-behind" onchange="SFX.saveSettings()"> Behind
+                  <button onclick="SFX.sounds.behind()" style="background:none;border:none;cursor:pointer;font-size:0.7rem;color:#7a8ba0;">▶</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" id="snd-pb" onchange="SFX.saveSettings()"> PB!
+                  <button onclick="SFX.sounds.pb()" style="background:none;border:none;cursor:pointer;font-size:0.7rem;color:#7a8ba0;">▶</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" id="snd-complete" onchange="SFX.saveSettings()"> Run complete
+                  <button onclick="SFX.sounds.complete()" style="background:none;border:none;cursor:pointer;font-size:0.7rem;color:#7a8ba0;">▶</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;color:#e2e8f0;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" id="snd-start" onchange="SFX.saveSettings()"> Run start
+                  <button onclick="SFX.sounds.start()" style="background:none;border:none;cursor:pointer;font-size:0.7rem;color:#7a8ba0;">▶</button>
+                </label>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="color:#7a8ba0;font-size:0.85rem;">Volume</span>
+                <input type="range" id="snd-volume" min="0" max="100" value="50" style="flex:1;" onchange="SFX.saveSettings()">
+              </div>
+
+              <!-- Keyboard Shortcuts -->
+              <div style="color:#6dd5fa;font-weight:600;margin:16px 0 8px;font-size:0.85rem;">Keyboard Shortcuts</div>
+              <div style="color:#7a8ba0;font-size:0.8rem;line-height:1.8;">
+                <kbd style="background:#0d1117;padding:2px 6px;border-radius:3px;color:#e2e8f0;">R</kbd> Reset Run &nbsp;
+                <kbd style="background:#0d1117;padding:2px 6px;border-radius:3px;color:#e2e8f0;">S</kbd> Stop Session &nbsp;
+                <kbd style="background:#0d1117;padding:2px 6px;border-radius:3px;color:#e2e8f0;">M</kbd> Mute Sounds &nbsp;
+                <kbd style="background:#0d1117;padding:2px 6px;border-radius:3px;color:#e2e8f0;">Numpad 4</kbd> Reset Run
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -322,20 +380,100 @@
     }
 
     // ── Init ──
-    fetch(`/live/state${userSuffix}`).then(r => r.json()).then(render).catch(() => {});
+    let prevSplitCount = 0;
+    let prevIsComplete = false;
+
+    fetch(`/live/state${userSuffix}`).then(r => r.json()).then(d => { render(d); prevSplitCount = (d.splits || []).length; prevIsComplete = !!d.run_complete; }).catch(() => {});
     connectSSE();
     setInterval(tickTimer, 100);
-    // Check for active users every 10s when idle
     checkActiveUsers();
     setInterval(() => { if (!data || !data.is_active) checkActiveUsers(); }, 10000);
 
+    // ── Sound triggers on split events ──
+    function checkSounds(newData) {
+      if (!newData || !newData.is_active) return;
+      const splits = newData.splits || [];
+      const pbSplits = newData.pb_splits || [];
+      const bestSegs = newData.best_segments || {};
+
+      // New split completed
+      if (splits.length > prevSplitCount && prevSplitCount >= 0) {
+        const latest = splits[splits.length - 1];
+        const bestMs = bestSegs[latest.level_id];
+        const pbIdx = splits.length - 1;
+        const pbMs = pbIdx < pbSplits.length ? pbSplits[pbIdx].split_ms : null;
+
+        if (bestMs != null && latest.split_ms <= bestMs) {
+          SFX.play("gold");
+        } else if (pbMs != null && latest.split_ms <= pbMs) {
+          SFX.play("ahead");
+        } else if (pbMs != null) {
+          SFX.play("behind");
+        }
+      }
+
+      // Run complete
+      if (newData.run_complete && !prevIsComplete) {
+        const totalMs = splits.reduce((s, x) => s + (x.split_ms || 0), 0);
+        if (newData.pb_total_ms && totalMs < newData.pb_total_ms) {
+          SFX.play("pb");
+        } else {
+          SFX.play("complete");
+        }
+      }
+
+      // Run start
+      if (splits.length === 0 && prevSplitCount > 0) {
+        SFX.play("start");
+      }
+
+      prevSplitCount = splits.length;
+      prevIsComplete = !!newData.run_complete;
+    }
+
+    // Hook into the render function to trigger sounds
+    const _origRender = render;
+    render = function(d) {
+      checkSounds(d);
+      _origRender(d);
+    };
+
+    // ── Sound & settings init ──
+    SFX.loadSettings();
+
+    function toggleSettings() {
+      const panel = $("settings-panel");
+      panel.classList.toggle("hidden");
+    }
+
+    function savePrefs() {
+      try {
+        const snesReset = document.getElementById("opt-snes-reset").checked;
+        localStorage.setItem("smw_prefs", JSON.stringify({ snesReset }));
+      } catch {}
+    }
+
+    function loadPrefs() {
+      try {
+        const saved = localStorage.getItem("smw_prefs");
+        if (saved) {
+          const prefs = JSON.parse(saved);
+          const el = document.getElementById("opt-snes-reset");
+          if (el) el.checked = !!prefs.snesReset;
+        }
+      } catch {}
+    }
+    loadPrefs();
+
     // ── Run Controls (show only for session owner) ──
+    let isOwner = false;
     async function checkOwnership() {
       try {
         const res = await fetch("/auth/me");
         if (res.ok) {
           const me = await res.json();
           if (String(me.id) === userId) {
+            isOwner = true;
             const controls = $("run-controls");
             controls.classList.remove("hidden");
             controls.style.display = "block";
@@ -349,6 +487,22 @@
       const msg = $("cmd-msg");
       msg.textContent = "Sending...";
       msg.style.color = "#7a8ba0";
+
+      // If resetting with SNES reset enabled, send snes_reset command too
+      if (cmdType === "reset_run") {
+        const snesReset = document.getElementById("opt-snes-reset");
+        if (snesReset && snesReset.checked) {
+          // Send SNES reset first
+          try {
+            await fetch(`/live/command/${userId}`, {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({type: "snes_reset"}),
+            });
+          } catch {}
+        }
+      }
+
       try {
         const res = await fetch(`/live/command/${userId}`, {
           method: "POST",
@@ -358,8 +512,7 @@
         const data = await res.json();
         if (data.ok) {
           msg.style.color = "#4ade80";
-          msg.textContent = `Command sent! Waiting for tracker...`;
-          // Poll for result
+          msg.textContent = "Command sent! Waiting for tracker...";
           for (let i = 0; i < 10; i++) {
             await new Promise(r => setTimeout(r, 500));
             const rr = await fetch(`/live/command-result/${userId}/${data.command_id}`);
@@ -367,7 +520,7 @@
             if (!result.pending) {
               if (result.result && result.result.success) {
                 msg.style.color = "#4ade80";
-                msg.textContent = `${cmdType.replace("_", " ")} — done!`;
+                msg.textContent = `${cmdType.replace(/_/g, " ")} — done!`;
               } else {
                 msg.style.color = "#f87171";
                 msg.textContent = result.result?.error || "Command failed";
@@ -376,14 +529,36 @@
             }
           }
           msg.style.color = "#fbbf24";
-          msg.textContent = "Tracker didn't respond in time. Is it running?";
+          msg.textContent = "Tracker didn't respond in time.";
         } else {
           msg.style.color = "#f87171";
-          msg.textContent = data.error || "Failed to send command";
+          msg.textContent = data.error || "Failed";
         }
       } catch {
         msg.style.color = "#f87171";
         msg.textContent = "Network error";
+      }
+    }
+
+    // ── Keyboard Shortcuts ──
+    document.addEventListener("keydown", (e) => {
+      if (!isOwner) return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      switch (e.code) {
+        case "KeyR": case "Numpad4": e.preventDefault(); sendCommand("reset_run"); break;
+        case "KeyS": e.preventDefault(); sendCommand("stop_run"); break;
+        case "KeyM": e.preventDefault(); toggleMute(); break;
+      }
+    });
+
+    function toggleMute() {
+      const vol = document.getElementById("snd-volume");
+      if (vol) {
+        vol.value = vol.value === "0" ? "50" : "0";
+        SFX.saveSettings();
+        const msg = $("cmd-msg");
+        msg.textContent = vol.value === "0" ? "🔇 Muted" : "🔊 Unmuted";
+        msg.style.color = "#7a8ba0";
       }
     }
   </script>

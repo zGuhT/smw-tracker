@@ -299,7 +299,7 @@ async def queue_command(request: Request, user_id: str):
         return JSONResponse({"error": "Command type required"}, status_code=400)
 
     # Validate command types
-    valid_types = {"capture_level", "reset_run", "start_run", "stop_run"}
+    valid_types = {"capture_level", "reset_run", "start_run", "stop_run", "snes_reset"}
     if cmd_type not in valid_types:
         return JSONResponse({"error": f"Unknown command type: {cmd_type}"}, status_code=400)
 
