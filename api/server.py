@@ -94,12 +94,13 @@ class PublicAccessMiddleware(BaseHTTPMiddleware):
             if path.startswith("/auth/"):
                 return await call_next(request)
             # Live push — has its own API key auth
-            if path == "/live/push":
+            if path == "/live/push" or path == "/live/command-result":
                 return await call_next(request)
-            # Authenticated users can write to levels, runs, export, run-control
+            # Authenticated users can write to levels, runs, export, run-control, commands
             if is_authenticated and any(path.startswith(p) for p in (
                 "/levels/", "/runs/", "/export/", "/run/",
                 "/session/", "/tracking/", "/community/",
+                "/live/command/",
             )):
                 return await call_next(request)
             return JSONResponse({"error": "Read-only access — log in to make changes"}, status_code=403)

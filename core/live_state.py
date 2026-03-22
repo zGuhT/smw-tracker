@@ -19,12 +19,14 @@ DEFAULT_USER = "default"
 class _UserState:
     """State container for a single user."""
 
-    __slots__ = ("state", "updated_at", "subscribers")
+    __slots__ = ("state", "updated_at", "subscribers", "pending_commands", "command_results")
 
     def __init__(self) -> None:
         self.state: dict[str, Any] | None = None
         self.updated_at: float = 0
         self.subscribers: list[asyncio.Queue] = []
+        self.pending_commands: list[dict[str, Any]] = []
+        self.command_results: dict[str, dict[str, Any]] = {}  # command_id → result
 
 
 class LiveStateManager:
@@ -96,6 +98,38 @@ class LiveStateManager:
                     "age_seconds": round(now - us.updated_at, 1),
                 })
         return result
+
+    # ── Command queue (web → local tracker) ──
+
+    def queue_command(self, user_id: str, command: dict[str, Any]) -> str:
+        """Queue a command for the user's local tracker. Returns command_id."""
+        import secrets
+        cmd_id = secrets.token_hex(8)
+        command["command_id"] = cmd_id
+        us = self._get_user(user_id)
+        us.pending_commands.append(command)
+        return cmd_id
+
+    def drain_commands(self, user_id: str) -> list[dict[str, Any]]:
+        """Get and clear all pending commands for a user (called on push response)."""
+        us = self._users.get(user_id)
+        if not us or not us.pending_commands:
+            return []
+        cmds = us.pending_commands[:]
+        us.pending_commands.clear()
+        return cmds
+
+    def store_command_result(self, user_id: str, command_id: str, result: dict[str, Any]) -> None:
+        """Store a command result from the local tracker."""
+        us = self._get_user(user_id)
+        us.command_results[command_id] = result
+
+    def get_command_result(self, user_id: str, command_id: str) -> dict[str, Any] | None:
+        """Get a command result (and remove it)."""
+        us = self._users.get(user_id)
+        if not us:
+            return None
+        return us.command_results.pop(command_id, None)
 
     @property
     def _subscribers(self) -> list[asyncio.Queue]:

@@ -92,7 +92,10 @@ async def live_push(request: Request):
                 import logging
                 logging.getLogger(__name__).warning("Session sync failed: %s", exc)
 
-        return {"ok": True, "user_id": user_id}
+        # Drain any pending commands for this user
+        commands = live_state.drain_commands(user_id)
+
+        return {"ok": True, "user_id": user_id, "commands": commands}
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
 
@@ -270,3 +273,64 @@ async def live_health(user: str = Query(DEFAULT_USER)):
 async def live_active_users():
     """List all users currently live (public)."""
     return live_state.get_active_users()
+
+
+# ── Remote commands (web → local tracker) ──
+
+@router.post("/command/{user_id}")
+async def queue_command(request: Request, user_id: str):
+    """Queue a command for a user's local tracker.
+
+    Authenticated users can only send commands to their own tracker.
+    """
+    from core.auth_service import get_user_from_session_token
+    session_token = request.cookies.get("smw_session")
+    auth_user = get_user_from_session_token(session_token)
+    if not auth_user or str(auth_user["id"]) != user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    cmd_type = body.get("type")
+    if not cmd_type:
+        return JSONResponse({"error": "Command type required"}, status_code=400)
+
+    # Validate command types
+    valid_types = {"capture_level", "reset_run", "start_run", "stop_run"}
+    if cmd_type not in valid_types:
+        return JSONResponse({"error": f"Unknown command type: {cmd_type}"}, status_code=400)
+
+    cmd_id = live_state.queue_command(user_id, body)
+    return {"ok": True, "command_id": cmd_id}
+
+
+@router.post("/command-result")
+async def submit_command_result(request: Request):
+    """Local tracker submits result of a command execution."""
+    if not _check_api_key(request):
+        return JSONResponse({"error": "Invalid API key"}, status_code=401)
+    user_id = _resolve_user_id(request)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    cmd_id = body.get("command_id")
+    if not cmd_id:
+        return JSONResponse({"error": "command_id required"}, status_code=400)
+
+    live_state.store_command_result(user_id, cmd_id, body)
+    return {"ok": True}
+
+
+@router.get("/command-result/{user_id}/{command_id}")
+async def get_command_result(request: Request, user_id: str, command_id: str):
+    """Poll for command result (web polls until tracker responds)."""
+    result = live_state.get_command_result(user_id, command_id)
+    if result is None:
+        return {"ok": True, "pending": True}
+    return {"ok": True, "pending": False, "result": result}

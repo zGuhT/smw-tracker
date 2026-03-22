@@ -116,6 +116,16 @@ class CloudSyncClient(TrackerClient):
                         log.info("Cloud sync restored after %d errors", consecutive_errors)
                     consecutive_errors = 0
                     last_payload_hash = payload_hash
+
+                    # Process any commands from the cloud
+                    try:
+                        resp_data = resp.json()
+                        commands = resp_data.get("commands", [])
+                        for cmd in commands:
+                            self._execute_command(cmd)
+                    except Exception:
+                        pass
+
                 elif resp.status_code == 401:
                     log.error("Cloud push rejected: invalid API key")
                     consecutive_errors += 1
@@ -143,3 +153,79 @@ class CloudSyncClient(TrackerClient):
         self._force_push.set()
         # Wait briefly for the thread to do a final push
         self._thread.join(timeout=2.0)
+
+    def _execute_command(self, cmd: dict) -> None:
+        """Execute a command from the cloud and report the result."""
+        cmd_type = cmd.get("type")
+        cmd_id = cmd.get("command_id")
+        log.info("Executing remote command: %s (id=%s)", cmd_type, cmd_id)
+
+        result = {"command_id": cmd_id, "type": cmd_type, "success": False}
+
+        try:
+            if cmd_type == "capture_level":
+                result = self._cmd_capture_level(cmd, cmd_id)
+            elif cmd_type == "reset_run":
+                result = self._cmd_reset_run(cmd, cmd_id)
+            elif cmd_type == "start_run":
+                result = self._cmd_start_run(cmd, cmd_id)
+            elif cmd_type == "stop_run":
+                result = self._cmd_stop_run(cmd, cmd_id)
+            else:
+                result["error"] = f"Unknown command: {cmd_type}"
+                log.warning("Unknown remote command: %s", cmd_type)
+        except Exception as exc:
+            result["error"] = str(exc)
+            log.error("Command %s failed: %s", cmd_type, exc)
+
+        # Report result back to cloud
+        try:
+            result_url = f"{self._cloud_url}/live/command-result"
+            self._session.post(result_url, json=result, timeout=5)
+        except Exception as exc:
+            log.warning("Failed to report command result: %s", exc)
+
+    def _cmd_capture_level(self, cmd: dict, cmd_id: str) -> dict:
+        """Read current level ID from SNES hardware."""
+        from hardware.qusb_client import QUsb2SnesClient
+        from hardware.smw_memory_map import LEVEL_ID
+        from core.smw_levels import normalize_level_id
+        from core.level_service import set_level_id_from_hardware
+
+        qusb = QUsb2SnesClient()
+        qusb.connect()
+        qusb.auto_attach_first_device(wait=False)
+        raw = qusb.read_u8(LEVEL_ID.address)
+        qusb.close()
+
+        hw_level_id = normalize_level_id(f"{raw:02X}")
+        level_db_id = cmd.get("level_db_id")
+
+        if level_db_id:
+            updated = set_level_id_from_hardware(level_db_id, hw_level_id)
+            log.info("Captured level ID %s for level %s", hw_level_id, level_db_id)
+            return {"command_id": cmd_id, "type": "capture_level",
+                    "success": True, "level_id": hw_level_id, "level": updated}
+
+        return {"command_id": cmd_id, "type": "capture_level",
+                "success": True, "level_id": hw_level_id}
+
+    def _cmd_reset_run(self, cmd: dict, cmd_id: str) -> dict:
+        """Reset the current run (stop active session)."""
+        self._local.stop_session()
+        self._force_push.set()
+        log.info("Run reset via remote command")
+        return {"command_id": cmd_id, "type": "reset_run", "success": True}
+
+    def _cmd_start_run(self, cmd: dict, cmd_id: str) -> dict:
+        """Start a new run."""
+        # The tracker will auto-start on next level enter
+        log.info("Start run requested via remote command")
+        return {"command_id": cmd_id, "type": "start_run", "success": True}
+
+    def _cmd_stop_run(self, cmd: dict, cmd_id: str) -> dict:
+        """Stop the current run."""
+        self._local.stop_session()
+        self._force_push.set()
+        log.info("Run stopped via remote command")
+        return {"command_id": cmd_id, "type": "stop_run", "success": True}

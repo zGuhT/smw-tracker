@@ -53,24 +53,67 @@ def delete_level_route(level_db_id: int):
 
 
 @router.post("/{level_db_id}/capture")
-def capture_level_id(level_db_id: int):
-    """Read current level ID from hardware and assign to this level definition."""
-    from core.level_service import set_level_id_from_hardware
-    from hardware.smw_memory_map import LEVEL_ID
-    try:
-        from hardware.qusb_client import QUsb2SnesClient
-        from core.smw_levels import normalize_level_id
-        qusb = QUsb2SnesClient()
-        qusb.connect()
-        qusb.auto_attach_first_device(wait=False)
-        raw = qusb.read_u8(LEVEL_ID.address)
-        qusb.close()
-        hw_level_id = normalize_level_id(f"{raw:02X}")
-        result = set_level_id_from_hardware(level_db_id, hw_level_id)
-        if not result:
-            raise HTTPException(404, "Level not found")
-        return {"success": True, "level_id": hw_level_id, "level": result}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(503, f"Hardware not available: {exc}")
+async def capture_level_id(request: Request, level_db_id: int):
+    """Read current level ID from hardware.
+
+    On localhost: reads directly from QUsb2Snes.
+    On the web: queues a command for the user's local tracker.
+    """
+    is_local = getattr(request.state, "is_local", False)
+
+    if is_local:
+        # Direct hardware read
+        from core.level_service import set_level_id_from_hardware
+        from hardware.smw_memory_map import LEVEL_ID
+        try:
+            from hardware.qusb_client import QUsb2SnesClient
+            from core.smw_levels import normalize_level_id
+            qusb = QUsb2SnesClient()
+            qusb.connect()
+            qusb.auto_attach_first_device(wait=False)
+            raw = qusb.read_u8(LEVEL_ID.address)
+            qusb.close()
+            hw_level_id = normalize_level_id(f"{raw:02X}")
+            result = set_level_id_from_hardware(level_db_id, hw_level_id)
+            if not result:
+                raise HTTPException(404, "Level not found")
+            return {"success": True, "level_id": hw_level_id, "level": result}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(503, f"Hardware not available: {exc}")
+    else:
+        # Remote: queue command for user's local tracker
+        from core.auth_service import get_user_from_session_token
+        session_token = request.cookies.get("smw_session")
+        user = get_user_from_session_token(session_token)
+        if not user:
+            raise HTTPException(401, "Not logged in")
+
+        from core.live_state import live_state
+        user_id = str(user["id"])
+
+        # Check if user's tracker is online
+        state = live_state.get_state(user_id=user_id)
+        if not state:
+            raise HTTPException(503,
+                "Your tracker is not connected. Start it with: "
+                "python run_tracker.py --cloud --api-key YOUR_KEY")
+
+        cmd_id = live_state.queue_command(user_id, {
+            "type": "capture_level",
+            "level_db_id": level_db_id,
+        })
+
+        # Poll for result (the tracker executes within ~500ms)
+        import asyncio
+        for _ in range(10):  # Wait up to 5 seconds
+            await asyncio.sleep(0.5)
+            result = live_state.get_command_result(user_id, cmd_id)
+            if result:
+                if result.get("success"):
+                    return {"success": True, "level_id": result["level_id"]}
+                else:
+                    raise HTTPException(503, result.get("error", "Capture failed"))
+
+        raise HTTPException(504, "Tracker did not respond in time. Is it running?")
