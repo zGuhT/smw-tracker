@@ -199,8 +199,12 @@ _TABLES_SQL_SQLITE = """
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE,
+        email TEXT UNIQUE,
         display_name TEXT,
         api_key TEXT UNIQUE,
+        email_verified INTEGER NOT NULL DEFAULT 0,
+        verification_token TEXT,
+        verification_expires TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions (
@@ -293,8 +297,12 @@ _TABLES_SQL_POSTGRES = """
     CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
+        email TEXT UNIQUE,
         display_name TEXT,
         api_key TEXT UNIQUE,
+        email_verified INTEGER NOT NULL DEFAULT 0,
+        verification_token TEXT,
+        verification_expires TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions (
@@ -431,6 +439,10 @@ def init_db() -> None:
         # Safe column migrations for existing Postgres DBs
         _pg_migrations = [
             "ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE users ADD COLUMN email TEXT",
+            "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN verification_token TEXT",
+            "ALTER TABLE users ADD COLUMN verification_expires TEXT",
         ]
         cur = conn.cursor()
         for migration in _pg_migrations:
@@ -450,6 +462,10 @@ def init_db() -> None:
         for migration in [
             "ALTER TABLE sessions ADD COLUMN run_definition_id INTEGER",
             "ALTER TABLE sessions ADD COLUMN user_id INTEGER",
+            "ALTER TABLE users ADD COLUMN email TEXT",
+            "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN verification_token TEXT",
+            "ALTER TABLE users ADD COLUMN verification_expires TEXT",
             "ALTER TABLE game_metadata ADD COLUMN developer TEXT",
             "ALTER TABLE game_metadata ADD COLUMN publisher TEXT",
             "ALTER TABLE game_metadata ADD COLUMN players TEXT",

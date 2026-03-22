@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign Up / Log In — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=2" rel="stylesheet">
+  <style>
+    .auth-wrap { max-width: 420px; margin: 2rem auto; }
+    .auth-tabs { display: flex; gap: 0; margin-bottom: 0; }
+    .auth-tab { flex: 1; padding: 0.75rem; text-align: center; cursor: pointer;
+      background: #1a2332; border: 1px solid #2a3544; color: #7a8ba0;
+      font-weight: 600; transition: all 0.2s; }
+    .auth-tab:first-child { border-radius: 8px 0 0 0; }
+    .auth-tab:last-child { border-radius: 0 8px 0 0; }
+    .auth-tab.active { background: #1e2a36; color: #6dd5fa; border-bottom-color: #1e2a36; }
+    .auth-form { background: #1e2a36; border: 1px solid #2a3544; border-top: none;
+      border-radius: 0 0 8px 8px; padding: 1.5rem; }
+    .auth-form.hidden { display: none; }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; color: #7a8ba0; font-size: 0.85rem; margin-bottom: 0.35rem; }
+    .field input { width: 100%; padding: 0.6rem 0.8rem; background: #0d1117;
+      border: 1px solid #2a3544; border-radius: 6px; color: #e2e8f0;
+      font-size: 0.95rem; outline: none; box-sizing: border-box; }
+    .field input:focus { border-color: #6dd5fa; }
+    .auth-btn { width: 100%; padding: 0.7rem; background: #6dd5fa; color: #0d1117;
+      border: none; border-radius: 6px; font-weight: 600; font-size: 1rem;
+      cursor: pointer; margin-top: 0.5rem; }
+    .auth-btn:hover { background: #5bc0e8; }
+    .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .auth-msg { margin-top: 1rem; padding: 0.75rem; border-radius: 6px;
+      font-size: 0.9rem; text-align: center; }
+    .auth-msg.ok { background: rgba(74, 222, 128, 0.1); color: #4ade80; }
+    .auth-msg.err { background: rgba(248, 113, 113, 0.1); color: #f87171; }
+    .auth-msg.hidden { display: none; }
+    .auth-hint { color: #7a8ba0; font-size: 0.8rem; margin-top: 0.3rem; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/auth/page" class="active">Sign Up</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="auth-wrap">
+        <div class="auth-tabs">
+          <div class="auth-tab active" id="tab-register" onclick="showTab('register')">Sign Up</div>
+          <div class="auth-tab" id="tab-login" onclick="showTab('login')">Log In</div>
+        </div>
+
+        <!-- Register form -->
+        <div class="auth-form" id="form-register">
+          <div class="field">
+            <label for="reg-username">Username</label>
+            <input type="text" id="reg-username" placeholder="e.g. speedrunner42" maxlength="32"
+                   pattern="[a-z0-9_-]+" autocomplete="username">
+            <div class="auth-hint">Lowercase letters, numbers, underscores. This is your profile URL.</div>
+          </div>
+          <div class="field">
+            <label for="reg-email">Email</label>
+            <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="reg-display">Display Name <span class="muted">(optional)</span></label>
+            <input type="text" id="reg-display" placeholder="Shown on your profile" maxlength="64">
+          </div>
+          <button class="auth-btn" id="btn-register" onclick="doRegister()">Create Account</button>
+          <div class="auth-msg hidden" id="msg-register"></div>
+        </div>
+
+        <!-- Login form -->
+        <div class="auth-form hidden" id="form-login">
+          <p style="color:#7a8ba0;font-size:0.9rem;margin-bottom:1rem;">
+            Enter your email and we'll send you a login link — no password needed.
+          </p>
+          <div class="field">
+            <label for="login-email">Email</label>
+            <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
+          </div>
+          <button class="auth-btn" id="btn-login" onclick="doLogin()">Send Login Link</button>
+          <div class="auth-msg hidden" id="msg-login"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    function showTab(tab) {
+      $("tab-register").classList.toggle("active", tab === "register");
+      $("tab-login").classList.toggle("active", tab === "login");
+      $("form-register").classList.toggle("hidden", tab !== "register");
+      $("form-login").classList.toggle("hidden", tab !== "login");
+    }
+
+    function showMsg(id, text, ok) {
+      const el = $(id);
+      el.textContent = text;
+      el.className = `auth-msg ${ok ? "ok" : "err"}`;
+    }
+
+    async function doRegister() {
+      const btn = $("btn-register");
+      btn.disabled = true;
+      const username = $("reg-username").value.trim().toLowerCase();
+      const email = $("reg-email").value.trim().toLowerCase();
+      const display_name = $("reg-display").value.trim() || undefined;
+
+      if (!username || !email) {
+        showMsg("msg-register", "Username and email are required.", false);
+        btn.disabled = false;
+        return;
+      }
+
+      try {
+        const res = await fetch("/auth/register", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({username, email, display_name}),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showMsg("msg-register", data.message, true);
+          // Dev mode: show direct link
+          if (data.dev_verify_url) {
+            $("msg-register").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Verify now (dev mode)</a>`;
+          }
+        } else {
+          showMsg("msg-register", data.error || "Registration failed.", false);
+        }
+      } catch {
+        showMsg("msg-register", "Network error — try again.", false);
+      }
+      btn.disabled = false;
+    }
+
+    async function doLogin() {
+      const btn = $("btn-login");
+      btn.disabled = true;
+      const email = $("login-email").value.trim().toLowerCase();
+
+      if (!email) {
+        showMsg("msg-login", "Email is required.", false);
+        btn.disabled = false;
+        return;
+      }
+
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({email}),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showMsg("msg-login", data.message, true);
+          if (data.dev_verify_url) {
+            $("msg-login").innerHTML += `<br><a href="${data.dev_verify_url}" style="color:#6dd5fa;">Log in now (dev mode)</a>`;
+          }
+        } else {
+          showMsg("msg-login", data.error || "Login failed.", false);
+        }
+      } catch {
+        showMsg("msg-login", "Network error — try again.", false);
+      }
+      btn.disabled = false;
+    }
+
+    // Allow Enter key to submit
+    $("reg-email").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
+    $("reg-display").addEventListener("keydown", e => { if (e.key === "Enter") doRegister(); });
+    $("login-email").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+    // Pre-select login tab if URL has ?login
+    if (location.search.includes("login")) showTab("login");
+  </script>
+</body>
+</html>

@@ -25,6 +25,7 @@ from api.routes.export import router as export_router
 from api.routes.run_control import router as run_control_router
 from api.routes.live import router as live_router
 from api.routes.users import router as users_router
+from api.routes.auth import router as auth_router
 from core.db import close_thread_connection, init_db
 from ui.routes import router as ui_router
 
@@ -71,9 +72,12 @@ class PublicAccessMiddleware(BaseHTTPMiddleware):
         if is_local:
             return await call_next(request)
 
-        # Public user — block write operations (except live push with API key)
+        # Public user — block write operations (except auth and live push)
         path = request.url.path
         if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            # Allow auth endpoints through — they have their own validation
+            if path.startswith("/auth/"):
+                return await call_next(request)
             # Allow /live/push through — it has its own API key auth
             if path == "/live/push":
                 return await call_next(request)
@@ -118,4 +122,5 @@ app.include_router(export_router)
 app.include_router(run_control_router)
 app.include_router(live_router)
 app.include_router(users_router)
+app.include_router(auth_router)
 app.include_router(ui_router)

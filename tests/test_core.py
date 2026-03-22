@@ -562,5 +562,101 @@ class TestStatsUserScoping(unittest.TestCase):
         self.assertIn("GameY_" + self._s, all_names)
 
 
+class TestAuthService(unittest.TestCase):
+    """Test registration, verification, and login flows."""
+
+    def setUp(self):
+        from core.db import init_db
+        init_db()
+        import uuid
+        self._s = uuid.uuid4().hex[:6]
+
+    def test_register_and_verify(self):
+        from core.auth_service import register_user, verify_token
+        result = register_user(f"auth_{self._s}", f"auth_{self._s}@test.com")
+        self.assertIsNotNone(result["token"])
+        self.assertIsNotNone(result["user_id"])
+
+        # Verify the token
+        user = verify_token(result["token"])
+        self.assertIsNotNone(user)
+        self.assertEqual(user["username"], f"auth_{self._s}")
+        self.assertIsNotNone(user["api_key"])
+
+    def test_verify_bad_token(self):
+        from core.auth_service import verify_token
+        user = verify_token("totally-bogus-token")
+        self.assertIsNone(user)
+
+    def test_verify_token_single_use(self):
+        from core.auth_service import register_user, verify_token
+        result = register_user(f"once_{self._s}", f"once_{self._s}@test.com")
+
+        user1 = verify_token(result["token"])
+        self.assertIsNotNone(user1)
+
+        # Second use should fail — token is cleared after verification
+        user2 = verify_token(result["token"])
+        self.assertIsNone(user2)
+
+    def test_duplicate_username(self):
+        from core.auth_service import register_user
+        register_user(f"dup_{self._s}", f"dup1_{self._s}@test.com")
+        with self.assertRaises(ValueError):
+            register_user(f"dup_{self._s}", f"dup2_{self._s}@test.com")
+
+    def test_duplicate_email(self):
+        from core.auth_service import register_user
+        register_user(f"em1_{self._s}", f"same_{self._s}@test.com")
+        with self.assertRaises(ValueError):
+            register_user(f"em2_{self._s}", f"same_{self._s}@test.com")
+
+    def test_login_flow(self):
+        from core.auth_service import register_user, verify_token, request_login
+        # Register and verify first
+        reg = register_user(f"login_{self._s}", f"login_{self._s}@test.com")
+        verify_token(reg["token"])
+
+        # Now request login
+        login = request_login(f"login_{self._s}@test.com")
+        self.assertIsNotNone(login)
+        self.assertIsNotNone(login["token"])
+
+        # Verify the login token
+        user = verify_token(login["token"])
+        self.assertIsNotNone(user)
+        self.assertEqual(user["username"], f"login_{self._s}")
+
+    def test_login_unverified_fails(self):
+        from core.auth_service import register_user, request_login
+        register_user(f"unver_{self._s}", f"unver_{self._s}@test.com")
+        # Don't verify — login should return None
+        result = request_login(f"unver_{self._s}@test.com")
+        self.assertIsNone(result)
+
+    def test_login_unknown_email(self):
+        from core.auth_service import request_login
+        result = request_login("nobody@nowhere.com")
+        self.assertIsNone(result)
+
+    def test_session_tokens(self):
+        from core.auth_service import (
+            generate_session_token, get_user_from_session_token,
+            invalidate_session_token, register_user, verify_token,
+        )
+        reg = register_user(f"sess_{self._s}", f"sess_{self._s}@test.com")
+        user = verify_token(reg["token"])
+
+        token = generate_session_token(user["id"])
+        self.assertIsNotNone(token)
+
+        looked_up = get_user_from_session_token(token)
+        self.assertIsNotNone(looked_up)
+        self.assertEqual(looked_up["id"], user["id"])
+
+        invalidate_session_token(token)
+        self.assertIsNone(get_user_from_session_token(token))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

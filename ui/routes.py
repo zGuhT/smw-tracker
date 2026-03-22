@@ -44,6 +44,11 @@ def live_page(request: Request):
     return templates.TemplateResponse("live.html", _ctx(request))
 
 
+@router.get("/auth/page", response_class=HTMLResponse)
+def auth_page(request: Request):
+    return templates.TemplateResponse("auth.html", _ctx(request))
+
+
 @router.get("/u/{username}", response_class=HTMLResponse)
 def user_profile_page(request: Request, username: str):
     """Public profile page for a user — shows their games, sessions, and live link."""
