@@ -181,7 +181,22 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
             completed_ids = {s["level_id"] for s in splits}
             enrichment["run_complete"] = all(lid in completed_ids for lid in run_level_ids)
 
-    # Cache it
+    # Resolve current level name from cloud DB
+    current_level_id = payload.get("current_level_id")
+    if current_level_id and game_name:
+        resolved_name = resolve_level_name(current_level_id, game_name)
+        if resolved_name and resolved_name != current_level_id:
+            enrichment["current_level_name"] = resolved_name
+
+    # Resolve split level names from cloud DB
+    if splits:
+        for s in splits:
+            if s.get("level_id") and game_name:
+                resolved = resolve_level_name(s["level_id"], game_name)
+                if resolved and resolved != s["level_id"]:
+                    s["level_name"] = resolved
+
+    # Cache it (only the enrichment dict, not the mutable splits fix)
     _enrich_cache[cache_key] = enrichment
     _enrich_cache_split_count[cache_key] = split_count
 
