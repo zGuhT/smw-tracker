@@ -1,22 +1,24 @@
 """
 Stats queries — all aggregation pushed to SQL.
 Includes per-game detail queries for the game detail page.
-"""
+f"""
 from __future__ import annotations
 
 from typing import Any
 
 from core import db
+
+_DUR = db.duration_sql()
 from core.time_utils import utc_now_iso
 
 
 def get_most_played_games() -> list[dict[str, Any]]:
     now = utc_now_iso()
     return db.fetchall(
-        """
+        f"""
         SELECT
             game_name,
-            SUM(CAST((julianday(COALESCE(end_time, ?)) - julianday(start_time)) * 86400 AS INTEGER))
+            SUM({_DUR})
                 AS total_playtime_seconds,
             COUNT(*) AS session_count
         FROM sessions
@@ -30,10 +32,10 @@ def get_most_played_games() -> list[dict[str, Any]]:
 def get_playtime_trend() -> list[dict[str, Any]]:
     now = utc_now_iso()
     return db.fetchall(
-        """
+        f"""
         SELECT
             DATE(start_time) AS date,
-            SUM(CAST((julianday(COALESCE(end_time, ?)) - julianday(start_time)) * 86400 AS INTEGER))
+            SUM({_DUR})
                 AS total_playtime_seconds
         FROM sessions
         GROUP BY DATE(start_time)
@@ -45,7 +47,7 @@ def get_playtime_trend() -> list[dict[str, Any]]:
 
 def get_sessions_per_day() -> list[dict[str, Any]]:
     return db.fetchall(
-        """
+        f"""
         SELECT DATE(start_time) AS date, COUNT(*) AS session_count
         FROM sessions
         GROUP BY DATE(start_time)
@@ -57,7 +59,7 @@ def get_sessions_per_day() -> list[dict[str, Any]]:
 def get_death_stats() -> list[dict[str, Any]]:
     from core.level_names import resolve_level_name
     rows = db.fetchall(
-        """
+        f"""
         SELECT level_id, game_name, COUNT(*) AS death_count,
                COUNT(DISTINCT session_id) AS sessions_with_deaths
         FROM game_events
@@ -82,10 +84,10 @@ def get_death_stats() -> list[dict[str, Any]]:
 def get_recent_sessions(limit: int = 20) -> list[dict[str, Any]]:
     now = utc_now_iso()
     return db.fetchall(
-        """
+        f"""
         SELECT
             id, game_name, platform, start_time, end_time, is_active,
-            CAST((julianday(COALESCE(end_time, ?)) - julianday(start_time)) * 86400 AS INTEGER)
+            {_DUR}
                 AS duration_seconds
         FROM sessions
         ORDER BY id DESC
@@ -102,10 +104,10 @@ def get_game_summary(game_name: str) -> dict[str, Any]:
     now = utc_now_iso()
 
     totals = db.fetchone(
-        """
+        f"""
         SELECT
             COUNT(*) AS session_count,
-            SUM(CAST((julianday(COALESCE(end_time, ?)) - julianday(start_time)) * 86400 AS INTEGER))
+            SUM({_DUR})
                 AS total_playtime_seconds,
             MIN(start_time) AS first_played,
             MAX(start_time) AS last_played
@@ -140,7 +142,7 @@ def get_game_deaths_by_level(game_name: str) -> list[dict[str, Any]]:
     """Return death counts per level with attempt count and average."""
     from core.level_names import resolve_level_name
     rows = db.fetchall(
-        """
+        f"""
         SELECT ge.level_id,
                COUNT(*) AS death_count,
                COUNT(DISTINCT ge.session_id) AS sessions_with_deaths
@@ -172,10 +174,10 @@ def get_game_sessions(game_name: str, limit: int = 50) -> list[dict[str, Any]]:
     """Return recent sessions for a specific game."""
     now = utc_now_iso()
     return db.fetchall(
-        """
+        f"""
         SELECT
             id, game_name, platform, start_time, end_time, is_active,
-            CAST((julianday(COALESCE(end_time, ?)) - julianday(start_time)) * 86400 AS INTEGER)
+            {_DUR}
                 AS duration_seconds
         FROM sessions
         WHERE game_name = ?
@@ -190,10 +192,10 @@ def get_game_playtime_trend(game_name: str) -> list[dict[str, Any]]:
     """Return daily playtime for a specific game."""
     now = utc_now_iso()
     return db.fetchall(
-        """
+        f"""
         SELECT
             DATE(start_time) AS date,
-            SUM(CAST((julianday(COALESCE(end_time, ?)) - julianday(start_time)) * 86400 AS INTEGER))
+            SUM({_DUR})
                 AS total_playtime_seconds
         FROM sessions
         WHERE game_name = ?

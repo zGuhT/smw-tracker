@@ -20,6 +20,13 @@ DB_PATH = DATA_DIR / "app.db"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 USE_POSTGRES = DATABASE_URL.startswith("postgres")
 
+
+def duration_sql(start_col: str = "start_time", end_expr: str = "COALESCE(end_time, ?)") -> str:
+    """Return SQL expression for duration in seconds, compatible with both SQLite and Postgres."""
+    if USE_POSTGRES:
+        return f"EXTRACT(EPOCH FROM ({end_expr}::timestamp - {start_col}::timestamp))::integer"
+    return f"CAST((julianday({end_expr}) - julianday({start_col})) * 86400 AS INTEGER)"
+
 _local = threading.local()
 
 # ── Connection management ──
