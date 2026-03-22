@@ -131,6 +131,9 @@
       const rows = [];
       const source = runLevels.length > 0 ? runLevels : completed.map(s => ({level_id: s.level_id, level_name: s.level_name}));
 
+      // Build a set of completed level_ids for reliable lookup
+      const completedSet = new Set(completed.map(s => s.level_id));
+
       for (const rl of source) {
         const done = completedMap[rl.level_id];
         const pb = pbLookup[rl.level_id] ?? null;
@@ -138,14 +141,16 @@
         if (done) {
           const diff = pb != null ? done.split_ms - pb : null;
           const isGold = best != null && done.split_ms <= best;
-          rows.push({name: rl.level_name || rl.level_id, ms: done.split_ms, diff, done: true, isGold});
+          rows.push({name: rl.level_name || rl.level_id, ms: done.split_ms, diff, done: true, isGold, level_id: rl.level_id});
         } else {
-          rows.push({name: rl.level_name || rl.level_id, ms: null, diff: null, done: false, isGold: false});
+          rows.push({name: rl.level_name || rl.level_id, ms: null, diff: null, done: false, isGold: false, level_id: rl.level_id});
         }
       }
 
-      let curIdx = rows.findIndex(r => !r.done);
-      if (curIdx === -1) curIdx = rows.length;
+      // Current split = number of completed splits (not first !done row)
+      // This avoids mismatches when split keys don't align perfectly
+      let curIdx = completed.length;
+      if (curIdx >= rows.length) curIdx = rows.length; // All done
 
       const total = rows.length;
       let ws = 0, we = total;

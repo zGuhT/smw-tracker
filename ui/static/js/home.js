@@ -296,7 +296,7 @@ function renderSplits(data) {
     }
   } else { for (const s of completed) { const pb = pbLookup[s.level_id] ?? null, best = bestSegs[s.level_id] ?? null, diff = pb != null ? s.split_ms - pb : null, isGold = best != null && s.split_ms <= best; rows.push({levelName: s.level_name || s.level_id, splitMs: s.split_ms, pbMs: pb, diffMs: diff, completed: true, isGold}); } }
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:16px">No run definition set up.</td></tr>'; return; }
-  let curIdx = rows.findIndex(r => !r.completed); if (curIdx === -1) curIdx = rows.length;
+  let curIdx = completed.length; if (curIdx >= rows.length) curIdx = rows.length;
   const total = rows.length; let ws = 0, we = total;
   if (total > WINDOW_SIZE) { const half = Math.floor(WINDOW_SIZE / 2); ws = Math.max(0, curIdx - half); we = ws + WINDOW_SIZE; if (we > total) { we = total; ws = Math.max(0, we - WINDOW_SIZE); } }
   const html = rows.slice(ws, we).map((r, i) => {
