@@ -23,68 +23,78 @@
       </nav>
     </header>
 
-    <main>
-      <section class="card" style="max-width:640px;margin:2rem auto;">
-        <h2 style="color:#6dd5fa;margin-bottom:1rem;text-align:center;">Download the Tracker</h2>
-        <p style="color:#7a8ba0;line-height:1.6;margin-bottom:1.5rem;">
-          The SMW Tracker client runs on your PC, connects to your SNES hardware via
-          <a href="https://github.com/Skarsnik/QUsb2snes" style="color:#6dd5fa;">QUsb2Snes</a>,
-          and automatically tracks your splits, deaths, and progress in real-time.
-          Your data syncs to the cloud so anyone can watch your runs live.
+    <main style="max-width:720px;margin:0 auto;">
+      <section class="card" style="text-align:center;padding:2rem 1.5rem;">
+        <h2 style="color:var(--accent);font-size:1.6rem;margin:0 0 0.5rem;">Get Started with SMW Tracker</h2>
+        <p class="muted" style="max-width:500px;margin:0 auto;line-height:1.6;">
+          Connect your SNES to the cloud. Track splits, deaths, and PBs automatically.
+          Share your runs live with the world.
         </p>
+      </section>
 
-        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;">
-          <div style="color:#6dd5fa;font-weight:600;margin-bottom:12px;">What You Need</div>
-          <ul style="color:#e2e8f0;padding-left:1.2rem;line-height:2;">
-            <li><strong>Python 3.10+</strong> — <a href="https://www.python.org/downloads/" style="color:#6dd5fa;">python.org/downloads</a></li>
-            <li><strong>QUsb2Snes</strong> — connects to SD2SNES/FXPak Pro, or compatible emulator</li>
-            <li><strong>An SMW Tracker account</strong> — <a href="/auth/page" style="color:#6dd5fa;">sign up here</a> (free)</li>
-          </ul>
-        </div>
-
-        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;">
-          <div style="color:#6dd5fa;font-weight:600;margin-bottom:12px;">Installation</div>
-          <pre style="color:#e2e8f0;font-size:0.85rem;overflow-x:auto;line-height:1.8;margin:0;"><span style="color:#7a8ba0;"># 1. Clone the tracker client</span>
-git clone https://github.com/zGuhT/smw-tracker.git
-cd smw-tracker
-
-<span style="color:#7a8ba0;"># 2. Install Python dependencies</span>
-pip install -r requirements.txt
-
-<span style="color:#7a8ba0;"># 3. Make sure QUsb2Snes is running and your SNES is connected</span>
-
-<span style="color:#7a8ba0;"># 4. Start the tracker with your API key</span>
-<span style="color:#7a8ba0;">#    (find your key at smwtracker.com → Account)</span>
-python run_tracker.py --cloud --api-key YOUR_API_KEY</pre>
-        </div>
-
-        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;">
-          <div style="color:#6dd5fa;font-weight:600;margin-bottom:12px;">How It Works</div>
-          <ol style="color:#e2e8f0;padding-left:1.2rem;line-height:2;">
-            <li>The tracker reads your SNES memory via QUsb2Snes (4 times per second)</li>
-            <li>It detects game state: which level you're in, deaths, exits, keyhole activations</li>
-            <li>Splits are recorded automatically when you complete a level</li>
-            <li>Session data syncs to <strong>smwtracker.com</strong> so viewers can watch live</li>
-            <li>Your stats, PBs, and split history are saved to your profile</li>
-          </ol>
-        </div>
-
-        <div style="background:#0d1117;border:1px solid #2a3544;border-radius:8px;padding:1.5rem;">
-          <div style="color:#fbbf24;font-weight:600;margin-bottom:12px;">A Note About the Code</div>
-          <p style="color:#7a8ba0;line-height:1.6;margin:0;">
-            The tracker client and the website share the same repository. The code is open source
-            so you can see exactly what it does — no secrets are stored in the repo.
-            Your API key, passwords, and email are never in the code; they're stored securely
-            on the server and in environment variables. The tracker client only needs your API key
-            to authenticate, and it only sends game state data (levels, splits, deaths) to the cloud.
-          </p>
+      <section class="card">
+        <div class="card-title">What You Need</div>
+        <div class="dl-grid">
+          <div class="dl-req"><div class="dl-req-icon">🐍</div><div><strong>Python 3.10+</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="https://www.python.org/downloads/" style="color:var(--accent);">python.org/downloads</a> — check "Add to PATH" during install</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">🔌</div><div><strong>QUsb2Snes</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="https://skarsnik.github.io/QUsb2snes/" style="color:var(--accent);">Download QUsb2Snes</a> — bridge between your hardware and the tracker</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">🎮</div><div><strong>Compatible Hardware</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;">SD2SNES / FXPak Pro, or a supported emulator (RetroArch, Snes9x with lua)</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">👤</div><div><strong>SMW Tracker Account</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="/auth/page" style="color:var(--accent);">Sign up here</a> (free) — you'll need your API key from the Account page</div></div></div>
         </div>
       </section>
 
-      <section class="card" style="max-width:640px;margin:1rem auto;text-align:center;">
-        <p style="color:#7a8ba0;font-size:0.9rem;">
-          A standalone desktop client with a GUI is planned for the future.
-          For now, the Python script is the way to go.
+      <section class="card">
+        <div class="card-title">Installation</div>
+        <div class="dl-steps">
+          <div class="dl-step"><div class="dl-step-num">1</div><div class="dl-step-body"><strong>Clone the repository</strong><pre class="dl-code">git clone https://github.com/zGuhT/smw-tracker.git
+cd smw-tracker</pre></div></div>
+          <div class="dl-step"><div class="dl-step-num">2</div><div class="dl-step-body"><strong>Install dependencies</strong><pre class="dl-code">pip install -r requirements.txt</pre></div></div>
+          <div class="dl-step"><div class="dl-step-num">3</div><div class="dl-step-body"><strong>Start QUsb2Snes</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Launch QUsb2Snes and make sure your SD2SNES/FXPak is connected, or your emulator has the connector running.</p></div></div>
+          <div class="dl-step"><div class="dl-step-num">4</div><div class="dl-step-body"><strong>Run the tracker</strong><pre class="dl-code"><span class="dl-comment"># Find your API key at smwtracker.com → Account</span>
+python run_tracker.py --cloud --api-key YOUR_API_KEY</pre></div></div>
+          <div class="dl-step"><div class="dl-step-num">5</div><div class="dl-step-body"><strong>Set up your game</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Load your ROM. The tracker auto-detects the game. Go to <strong style="color:var(--text);">smwtracker.com → Games → [Your Game] → Setup</strong> to configure levels. Use the <strong style="color:var(--text);">Capture</strong> button on each level while you're in that level to map SNES level IDs.</p></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">OBS Overlay for Streamers</div>
+        <p class="muted" style="margin-bottom:12px;line-height:1.6;">Add a real-time splits overlay to your stream. In OBS, add a <strong style="color:var(--text);">Browser Source</strong> with this URL:</p>
+        {% if auth_user %}
+        <pre class="dl-code" style="color:var(--accent);">https://smwtracker.com/overlay?user={{ auth_user.id }}</pre>
+        {% else %}
+        <pre class="dl-code">https://smwtracker.com/overlay?user=YOUR_USER_ID</pre>
+        {% endif %}
+        <p class="muted" style="margin-top:12px;font-size:0.85rem;line-height:1.6;"><strong style="color:var(--text);">Recommended OBS settings:</strong> Width: 320, Height: 600. Check "Shutdown source when not visible" and "Refresh browser when scene becomes active".</p>
+        <p class="muted" style="margin-top:8px;font-size:0.85rem;line-height:1.6;"><strong style="color:var(--text);">URL parameters:</strong>
+          <code style="color:var(--accent);">splits=6</code> max visible splits,
+          <code style="color:var(--accent);">width=320</code> panel width in px,
+          <code style="color:var(--accent);">theme=dark|light|minimal</code>
+        </p>
+        <a href="/overlay{% if auth_user %}?user={{ auth_user.id }}{% endif %}" target="_blank" style="display:inline-block;margin-top:12px;color:var(--accent);font-size:0.9rem;">Preview your overlay →</a>
+      </section>
+
+      <section class="card">
+        <div class="card-title">How It Works</div>
+        <div class="dl-steps">
+          <div class="dl-step"><div class="dl-step-num" style="background:var(--accent);color:#0d1117;">⚡</div><div class="dl-step-body"><strong>Reads SNES memory 4× per second</strong><p class="muted" style="font-size:0.85rem;margin:2px 0 0;">Via QUsb2Snes — detects level, position, lives, animation state, game mode transitions</p></div></div>
+          <div class="dl-step"><div class="dl-step-num" style="background:var(--danger);color:#0d1117;">💀</div><div class="dl-step-body"><strong>Detects deaths automatically</strong><p class="muted" style="font-size:0.85rem;margin:2px 0 0;">Three methods: life counter, death animation (0x09), and game mode death sequence — works with kaizo 0-life hacks</p></div></div>
+          <div class="dl-step"><div class="dl-step-num" style="background:var(--gold);color:#0d1117;">🏁</div><div class="dl-step-body"><strong>Records splits on level exit</strong><p class="muted" style="font-size:0.85rem;margin:2px 0 0;">Goal tape, keyhole/secret exits, level-end modes, and level transitions — normal, secret, and special exits</p></div></div>
+          <div class="dl-step"><div class="dl-step-num" style="background:var(--success);color:#0d1117;">☁️</div><div class="dl-step-body"><strong>Syncs to cloud every 0.5s</strong><p class="muted" style="font-size:0.85rem;margin:2px 0 0;">Sessions, splits, deaths, and progress pushed to smwtracker.com — anyone can watch live</p></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Troubleshooting</div>
+        <details class="dl-faq"><summary><strong>"Can't connect to QUsb2Snes"</strong></summary><p>Make sure QUsb2Snes is running and shows your device. The tracker connects to <code>ws://localhost:23074</code> by default. Change with <code>--qusb-url ws://host:port</code>.</p></details>
+        <details class="dl-faq"><summary><strong>"No default run for [game]"</strong></summary><p>Normal on first launch. Go to the game's Setup page on smwtracker.com to create a run definition with levels and capture SNES level IDs.</p></details>
+        <details class="dl-faq"><summary><strong>"Cloud push rejected: invalid API key"</strong></summary><p>Check your API key on the Account page. Ensure no extra spaces or line breaks in the key.</p></details>
+        <details class="dl-faq"><summary><strong>Deaths aren't being counted</strong></summary><p>The tracker uses three detection methods (life counter, animation 0x09, game mode 0x12). If your hack bypasses all three, please report it.</p></details>
+        <details class="dl-faq"><summary><strong>Splits aren't recording</strong></summary><p>Ensure levels are configured on the Setup page with captured SNES level IDs. Only levels in your run definition trigger splits.</p></details>
+      </section>
+
+      <section class="card" style="text-align:center;">
+        <p class="muted" style="line-height:1.6;">
+          Open source — <a href="https://github.com/zGuhT/smw-tracker" style="color:var(--accent);">github.com/zGuhT/smw-tracker</a>.
+          Your credentials are never in code. Only game state is sent to the cloud.
         </p>
       </section>
     </main>

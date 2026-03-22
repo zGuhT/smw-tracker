@@ -164,6 +164,11 @@
     const MAX_SPLITS = parseInt(params.get("splits")) || 5;
     const OVERLAY_WIDTH = parseInt(params.get("width")) || 320;
     const THEME = params.get("theme") || "dark";
+    const USER_ID = params.get("user") || null;
+
+    // Cloud mode: poll /live/state?user=X  |  Local mode: poll /session/current
+    const POLL_URL = USER_ID ? `/live/state?user=${USER_ID}` : "/session/current";
+    const SSE_URL = USER_ID ? `/live/stream?user=${USER_ID}` : null;
 
     if (THEME !== "dark") document.body.classList.add(`theme-${THEME}`);
     document.querySelector(".overlay").style.setProperty("--overlay-width", OVERLAY_WIDTH + "px");
@@ -187,13 +192,28 @@
     let data = null;
     let serverOffset = 0;
 
-    // ── Poll ──
+    // ── Poll / SSE ──
     async function poll() {
       try {
-        const res = await fetch("/session/current");
+        const res = await fetch(POLL_URL);
         data = await res.json();
         if (data.server_time) serverOffset = data.server_time - (Date.now() / 1000);
         render();
+      } catch {}
+    }
+
+    function connectSSE() {
+      if (!SSE_URL) return;
+      try {
+        const es = new EventSource(SSE_URL);
+        es.onmessage = (e) => {
+          try {
+            data = JSON.parse(e.data);
+            if (data.server_time) serverOffset = data.server_time - (Date.now() / 1000);
+            render();
+          } catch {}
+        };
+        es.onerror = () => { es.close(); setTimeout(connectSSE, 3000); };
       } catch {}
     }
 
@@ -374,7 +394,8 @@
 
     // ── Init ──
     poll();
-    setInterval(poll, 1000);
+    setInterval(poll, SSE_URL ? 5000 : 1000);  // Slower poll when SSE is active
+    if (SSE_URL) connectSSE();
     setInterval(tick, 100);
   </script>
 </body>

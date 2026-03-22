@@ -633,3 +633,46 @@ button.primary:hover { background: #5bc0e8; }
 .recent-run-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .recent-run-left strong { color: var(--accent); }
 .recent-run-meta { font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+
+/* ── Download page ── */
+.dl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .dl-grid { grid-template-columns: 1fr; } }
+.dl-req { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); }
+.dl-req-icon { font-size: 1.4rem; flex-shrink: 0; width: 32px; text-align: center; }
+.dl-steps { display: flex; flex-direction: column; gap: 12px; }
+.dl-step { display: flex; gap: 14px; align-items: flex-start; }
+.dl-step-num { width: 28px; height: 28px; background: var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; color: var(--text); }
+.dl-step-body { flex: 1; min-width: 0; }
+.dl-code { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-family: var(--mono); font-size: 0.82rem; color: var(--text); overflow-x: auto; line-height: 1.7; margin: 8px 0 0; white-space: pre; }
+.dl-comment { color: var(--muted); }
+.dl-faq { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.dl-faq:last-child { border-bottom: none; }
+.dl-faq summary { cursor: pointer; padding: 4px 0; color: var(--text); }
+.dl-faq summary:hover { color: var(--accent); }
+.dl-faq p { margin: 8px 0 4px; color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+.dl-faq code { color: var(--accent); font-size: 0.82rem; background: rgba(109,213,250,0.08); padding: 1px 5px; border-radius: 3px; }
+
+/* ── Landing page ── */
+.landing-hero { text-align: center; padding: 2.5rem 1.5rem; }
+.landing-hero h2 { color: var(--accent); font-size: 1.8rem; margin: 0 0 0.75rem; }
+.landing-hero p { color: var(--muted); max-width: 520px; margin: 0 auto 1.5rem; line-height: 1.6; }
+.landing-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.landing-btn-primary { background: var(--accent); color: #0d1117; padding: 10px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; }
+.landing-btn-primary:hover { filter: brightness(1.1); }
+.landing-btn-secondary { background: var(--panel-2); color: var(--text); padding: 10px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; border: 1px solid var(--border); }
+.landing-btn-secondary:hover { border-color: var(--accent); }
+
+.live-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.live-session-card { display: block; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none; color: inherit; transition: border-color 0.15s; }
+.live-session-card:hover { border-color: var(--accent); }
+.live-session-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.live-session-game { font-weight: 700; color: var(--text); }
+.live-session-detail { font-size: 0.85rem; color: var(--muted); }
+.live-session-detail .mono { font-family: var(--mono); color: var(--accent); }
+
+.featured-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.featured-game-card { display: block; padding: 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none; color: inherit; text-align: center; transition: border-color 0.15s; }
+.featured-game-card:hover { border-color: var(--accent); }
+.featured-game-name { font-weight: 700; margin-bottom: 4px; }
+.featured-game-meta { font-size: 0.8rem; color: var(--muted); }
+

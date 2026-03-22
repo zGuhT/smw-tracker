@@ -21,19 +21,15 @@
 
     <main>
       <!-- Hero -->
-      <section class="card" style="text-align:center;padding:2.5rem 1.5rem;">
-        <h2 style="color:#6dd5fa;font-size:1.8rem;margin:0 0 0.75rem;">Real-time SNES Speedrun Tracking</h2>
-        <p style="color:#7a8ba0;max-width:520px;margin:0 auto 1.5rem;line-height:1.6;">
-          Connect your SNES hardware via QUsb2Snes, track your splits, deaths, and PBs automatically,
-          and share your runs live with anyone in the world.
+      <section class="card landing-hero">
+        <h2>Real-time SNES Speedrun Tracking</h2>
+        <p>
+          Connect your SNES hardware via QUsb2Snes, track your splits, deaths,
+          and PBs automatically, and share your runs live with anyone in the world.
         </p>
-        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-          <a href="/auth/page" style="background:#6dd5fa;color:#0d1117;padding:10px 28px;border-radius:6px;text-decoration:none;font-weight:600;">
-            Create Account
-          </a>
-          <a href="/download" style="background:#2a3544;color:#e2e8f0;padding:10px 28px;border-radius:6px;text-decoration:none;font-weight:600;border:1px solid #3a4a5a;">
-            Download Tracker
-          </a>
+        <div class="landing-buttons">
+          <a href="/auth/page" class="landing-btn-primary">Create Account</a>
+          <a href="/download" class="landing-btn-secondary">Download Tracker</a>
         </div>
       </section>
 
@@ -43,10 +39,10 @@
         <div id="live-sessions"><p class="muted">Checking for live sessions...</p></div>
       </section>
 
-      <!-- Global Stats -->
+      <!-- Community Stats -->
       <section class="card">
         <div class="card-title">Community Stats</div>
-        <div id="global-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;">
           <div class="stat-box"><div class="stat-label">Users</div><div class="stat-value" id="gs-users">—</div></div>
           <div class="stat-box"><div class="stat-label">Sessions</div><div class="stat-value" id="gs-sessions">—</div></div>
           <div class="stat-box"><div class="stat-label">Games</div><div class="stat-value" id="gs-games">—</div></div>
@@ -54,25 +50,52 @@
         </div>
       </section>
 
+      <!-- Featured Games -->
+      <section class="card">
+        <div class="card-title">Popular Games</div>
+        <div id="featured-games" class="featured-games"><p class="muted">Loading...</p></div>
+      </section>
+
+      <!-- Recent Activity -->
+      <section class="card">
+        <div class="card-title">Recent Runs</div>
+        <div id="recent-activity"><p class="muted">Loading...</p></div>
+      </section>
+
       <!-- User Search -->
       <section class="card">
         <div class="card-title">Find a Runner</div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <input type="text" id="search-input" placeholder="Search by username..." style="flex:1;padding:0.6rem 0.8rem;background:#0d1117;border:1px solid #2a3544;border-radius:6px;color:#e2e8f0;font-size:0.95rem;outline:none;">
-          <button onclick="searchUsers()" style="background:#6dd5fa;color:#0d1117;border:none;border-radius:6px;padding:0.6rem 1.2rem;font-weight:600;cursor:pointer;">Search</button>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="search-input" placeholder="Search by username..."
+                 style="flex:1;padding:0.6rem 0.8rem;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem;outline:none;">
+          <button onclick="searchUsers()" class="landing-btn-primary" style="padding:0.6rem 1.2rem;border:none;cursor:pointer;font-size:0.9rem;">Search</button>
         </div>
-        <div id="search-results"></div>
+        <div id="search-results" style="margin-top:8px;"></div>
       </section>
     </main>
     <footer style="text-align:center;padding:2rem 0 1rem;color:#3a4a5a;font-size:0.75rem;">
-      SMW Tracker v1.0.0 — <a href="https://github.com/zGuhT/smw-tracker" style="color:#3a4a5a;">GitHub</a>
+      SMW Tracker v1.0.1 — <a href="https://github.com/zGuhT/smw-tracker" style="color:#3a4a5a;">GitHub</a>
     </footer>
   </div>
 
   <script>
     const $ = id => document.getElementById(id);
 
-    // ── Live sessions ──
+    function formatMs(ms) {
+      if (ms == null) return "—";
+      const s = Math.floor(ms / 1000), m = Math.floor(s / 60), sec = s % 60;
+      const frac = Math.floor((ms % 1000) / 10);
+      if (m > 0) return `${m}:${String(sec).padStart(2,"0")}.${String(frac).padStart(2,"0")}`;
+      return `${sec}.${String(frac).padStart(2,"0")}`;
+    }
+
+    function formatDur(seconds) {
+      if (!seconds) return "0m";
+      const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    // ── Live sessions (with game info + split preview) ──
     async function loadLiveSessions() {
       try {
         const res = await fetch("/live/active");
@@ -82,34 +105,96 @@
           container.innerHTML = '<p class="muted">No one is live right now. Check back later!</p>';
           return;
         }
-        container.innerHTML = users.map(u =>
-          `<a href="/live?user=${u.user_id}" class="run-card" style="display:block;margin-bottom:8px;">
-            <strong>${u.game_name || "Playing"}</strong>
-            <span class="status-badge active" style="margin-left:8px">● LIVE</span>
-          </a>`
-        ).join("");
+        // Fetch state for each live user
+        const cards = await Promise.all(users.map(async u => {
+          try {
+            const stateRes = await fetch(`/live/state?user=${u.user_id}`);
+            const state = await stateRes.json();
+            const splits = state.splits || [];
+            const deaths = state.deaths_this_session || 0;
+            const level = state.current_level_name || state.current_level_id || "";
+            const splitCount = splits.length;
+            const runLevels = state.run_levels || [];
+            const progress = runLevels.length ? `${splitCount}/${runLevels.length} splits` : `${splitCount} splits`;
+            return `<a href="/live?user=${u.user_id}" class="live-session-card">
+              <div class="live-session-header">
+                <span class="live-session-game">${state.game_name || u.game_name || "Playing"}</span>
+                <span class="status-badge active">● LIVE</span>
+              </div>
+              <div class="live-session-detail">
+                ${level ? `Level: <span class="mono">${level}</span> · ` : ""}${progress} · <span class="deaths-color">${deaths} deaths</span>
+              </div>
+            </a>`;
+          } catch {
+            return `<a href="/live?user=${u.user_id}" class="live-session-card">
+              <div class="live-session-header">
+                <span class="live-session-game">${u.game_name || "Playing"}</span>
+                <span class="status-badge active">● LIVE</span>
+              </div>
+            </a>`;
+          }
+        }));
+        container.innerHTML = `<div class="live-card-grid">${cards.join("")}</div>`;
       } catch { $("live-sessions").innerHTML = '<p class="muted">Could not load live sessions.</p>'; }
     }
 
-    // ── Global stats ──
+    // ── Global stats (from leaderboard endpoint) ──
     async function loadGlobalStats() {
       try {
-        const [users, games, sessions] = await Promise.all([
-          fetch("/users/").then(r => r.json()),
-          fetch("/stats/most-played").then(r => r.json()),
-          fetch("/stats/recent-sessions?limit=1").then(r => r.json()),
-        ]);
-        $("gs-users").textContent = users.length || "0";
-        $("gs-games").textContent = games.length || "0";
-        // Total sessions — get from most-played sum
-        const totalSessions = games.reduce((s, g) => s + (g.session_count || 0), 0);
-        $("gs-sessions").textContent = totalSessions.toLocaleString();
-        // Deaths — quick fetch
-        const deathRes = await fetch("/stats/deaths");
-        const deaths = await deathRes.json();
-        const totalDeaths = deaths.reduce((s, d) => s + (d.death_count || 0), 0);
-        $("gs-deaths").textContent = totalDeaths.toLocaleString();
+        const res = await fetch("/leaderboard/global");
+        const data = await res.json();
+        const t = data.totals || {};
+        $("gs-users").textContent = (t.total_users || 0).toLocaleString();
+        $("gs-sessions").textContent = (t.total_sessions || 0).toLocaleString();
+        $("gs-games").textContent = (t.total_games || 0).toLocaleString();
+        $("gs-deaths").textContent = (t.total_deaths || 0).toLocaleString();
       } catch {}
+    }
+
+    // ── Featured / popular games ──
+    async function loadFeaturedGames() {
+      try {
+        const res = await fetch("/games/library");
+        const games = await res.json();
+        const container = $("featured-games");
+        if (!games.length) {
+          container.innerHTML = '<p class="muted">No games tracked yet. Be the first!</p>';
+          return;
+        }
+        // Show top 6 by session count
+        const top = games.slice(0, 8);
+        container.innerHTML = top.map(g => {
+          const name = g.display_name || g.game_name;
+          const players = g.player_count || 0;
+          const sessions = g.session_count || 0;
+          const img = g.boxart_url
+            ? `<img src="${g.boxart_url}" alt="${name}" loading="lazy" style="width:64px;height:64px;object-fit:contain;margin-bottom:8px;border-radius:4px;">`
+            : '<div style="font-size:2rem;margin-bottom:8px;">🎮</div>';
+          return `<a href="/game/${encodeURIComponent(g.game_name)}" class="featured-game-card">
+            ${img}
+            <div class="featured-game-name">${name}</div>
+            <div class="featured-game-meta">${players} player${players !== 1 ? "s" : ""} · ${sessions} session${sessions !== 1 ? "s" : ""}</div>
+          </a>`;
+        }).join("");
+      } catch { $("featured-games").innerHTML = '<p class="muted">Could not load games.</p>'; }
+    }
+
+    // ── Recent activity (latest completed runs across all users) ──
+    async function loadRecentActivity() {
+      try {
+        const res = await fetch("/leaderboard/global");
+        const data = await res.json();
+        const active = data.most_active || [];
+        const container = $("recent-activity");
+        if (!active.length) {
+          container.innerHTML = '<p class="muted">No activity yet. Start tracking!</p>';
+          return;
+        }
+        container.innerHTML = active.slice(0, 5).map((u, i) => {
+          const name = u.display_name || u.username;
+          return `<a href="/u/${u.username}" class="recent-run-card"><div class="recent-run-inner"><span class="recent-run-left"><strong>${name}</strong></span><span class="recent-run-meta">${u.session_count} sessions · ${u.games_played} games</span></div></a>`;
+        }).join("");
+      } catch { $("recent-activity").innerHTML = '<p class="muted">Could not load activity.</p>'; }
     }
 
     // ── User search ──
@@ -128,20 +213,18 @@
           return;
         }
         container.innerHTML = matches.map(u =>
-          `<a href="/u/${u.username}" class="run-card" style="display:block;margin-bottom:8px;">
-            <strong>${u.display_name || u.username}</strong>
-            <span class="muted" style="margin-left:8px">@${u.username}</span>
-          </a>`
+          `<a href="/u/${u.username}" class="recent-run-card"><div class="recent-run-inner"><span class="recent-run-left"><strong>${u.display_name || u.username}</strong> <span class="muted" style="font-size:0.85rem;">@${u.username}</span></span></div></a>`
         ).join("");
       } catch { $("search-results").innerHTML = '<p class="muted">Search failed.</p>'; }
     }
 
-    // Enter key for search
     $("search-input").addEventListener("keydown", e => { if (e.key === "Enter") searchUsers(); });
 
     // Init
     loadLiveSessions();
     loadGlobalStats();
+    loadFeaturedGames();
+    loadRecentActivity();
     setInterval(loadLiveSessions, 15000);
   </script>
 </body>
