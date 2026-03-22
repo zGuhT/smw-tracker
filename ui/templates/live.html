@@ -75,6 +75,19 @@
               <span class="ls-footer-value accent-color" id="lv-pb">—</span>
             </div>
           </div>
+
+          <!-- Run Controls (only shown to the session owner) -->
+          <div id="run-controls" class="hidden" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+              <button onclick="sendCommand('reset_run')" class="btn-sm" style="background:#f87171;color:#0d1117;border:none;padding:8px 20px;font-weight:600;">
+                Reset Run
+              </button>
+              <button onclick="sendCommand('stop_run')" class="btn-sm" style="background:#2a3544;color:#e2e8f0;border:1px solid #3a4a5a;padding:8px 20px;">
+                Stop Session
+              </button>
+            </div>
+            <div id="cmd-msg" style="margin-top:8px;font-size:0.85rem;color:#7a8ba0;"></div>
+          </div>
         </div>
       </section>
     </main>
@@ -315,6 +328,64 @@
     // Check for active users every 10s when idle
     checkActiveUsers();
     setInterval(() => { if (!data || !data.is_active) checkActiveUsers(); }, 10000);
+
+    // ── Run Controls (show only for session owner) ──
+    async function checkOwnership() {
+      try {
+        const res = await fetch("/auth/me");
+        if (res.ok) {
+          const me = await res.json();
+          if (String(me.id) === userId) {
+            const controls = $("run-controls");
+            controls.classList.remove("hidden");
+            controls.style.display = "block";
+          }
+        }
+      } catch {}
+    }
+    checkOwnership();
+
+    async function sendCommand(cmdType) {
+      const msg = $("cmd-msg");
+      msg.textContent = "Sending...";
+      msg.style.color = "#7a8ba0";
+      try {
+        const res = await fetch(`/live/command/${userId}`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({type: cmdType}),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          msg.style.color = "#4ade80";
+          msg.textContent = `Command sent! Waiting for tracker...`;
+          // Poll for result
+          for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 500));
+            const rr = await fetch(`/live/command-result/${userId}/${data.command_id}`);
+            const result = await rr.json();
+            if (!result.pending) {
+              if (result.result && result.result.success) {
+                msg.style.color = "#4ade80";
+                msg.textContent = `${cmdType.replace("_", " ")} — done!`;
+              } else {
+                msg.style.color = "#f87171";
+                msg.textContent = result.result?.error || "Command failed";
+              }
+              return;
+            }
+          }
+          msg.style.color = "#fbbf24";
+          msg.textContent = "Tracker didn't respond in time. Is it running?";
+        } else {
+          msg.style.color = "#f87171";
+          msg.textContent = data.error || "Failed to send command";
+        }
+      } catch {
+        msg.style.color = "#f87171";
+        msg.textContent = "Network error";
+      }
+    }
   </script>
 </body>
 </html>
