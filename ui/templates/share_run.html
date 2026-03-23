@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ og_title }} — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ og_description }}">
+  <!-- Open Graph / Social Sharing -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ og_title }}">
+  <meta property="og:description" content="{{ og_description }}">
+  <meta property="og:url" content="https://smwtracker.com/run/{{ session_id }}">
+  <meta property="og:site_name" content="SMW Tracker">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ og_title }}">
+  <meta name="twitter:description" content="{{ og_description }}">
+  <link href="/static/css/app.css?v=4" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/games">Games</a>
+        <a href="/leaderboards">Leaderboards</a>
+        <a href="/download">Download</a>
+        {% if auth_user %}
+          <a href="/u/{{ auth_user.username }}">{{ auth_user.display_name or auth_user.username }}</a>
+        {% else %}
+          <a href="/auth/page">Sign Up / Log In</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    <main style="max-width:640px;margin:0 auto;">
+      <!-- Run Card -->
+      <section class="card share-run-card">
+        <div class="share-run-header">
+          <div class="share-run-game">{{ game_name }}</div>
+          {% if username %}
+          <a href="/u/{{ username }}" class="share-run-runner">{{ runner }}</a>
+          {% else %}
+          <span class="share-run-runner">{{ runner }}</span>
+          {% endif %}
+        </div>
+
+        <div class="share-run-time">{{ time_str }}</div>
+
+        <div class="share-run-stats">
+          <div class="share-stat"><span class="share-stat-val">{{ levels_completed }}</span><span class="share-stat-label">Levels</span></div>
+          <div class="share-stat"><span class="share-stat-val deaths-color">{{ total_deaths }}</span><span class="share-stat-label">Deaths</span></div>
+          <div class="share-stat"><span class="share-stat-val" id="date-display">{{ start_time[:10] if start_time else '—' }}</span><span class="share-stat-label">Date</span></div>
+        </div>
+
+        <!-- Splits loaded via JS -->
+        <div id="share-splits"></div>
+      </section>
+
+      <!-- Actions -->
+      <section class="card" style="text-align:center;">
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          {% if username %}
+          <a href="/u/{{ username }}/game/{{ game_name }}" class="landing-btn-secondary" style="font-size:0.9rem;">View Game Stats</a>
+          <a href="/u/{{ username }}" class="landing-btn-secondary" style="font-size:0.9rem;">{{ runner }}'s Profile</a>
+          {% endif %}
+          <a href="/leaderboards" class="landing-btn-secondary" style="font-size:0.9rem;">Leaderboards</a>
+        </div>
+        <p class="muted" style="margin-top:16px;font-size:0.82rem;">
+          Tracked live with <a href="/" style="color:var(--accent);">SMW Tracker</a> — real-time SNES speedrun tracking
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function formatMs(ms) {
+      if (ms == null) return "—";
+      const s = Math.floor(ms / 1000), m = Math.floor(s / 60), sec = s % 60;
+      const frac = Math.floor((ms % 1000) / 10);
+      if (m > 0) return `${m}:${String(sec).padStart(2,"0")}.${String(frac).padStart(2,"0")}`;
+      return `${sec}.${String(frac).padStart(2,"0")}`;
+    }
+
+    async function loadSplits() {
+      try {
+        const res = await fetch("/stats/run/{{ session_id }}");
+        const data = await res.json();
+        if (!data.splits || !data.splits.length) return;
+        const wrap = document.getElementById("share-splits");
+        const rows = data.splits.map((s, i) =>
+          `<tr>
+            <td class="share-split-num">${i + 1}</td>
+            <td class="share-split-name">${s.level_name}</td>
+            <td class="share-split-time mono">${formatMs(s.split_ms)}</td>
+            <td class="share-split-deaths deaths-color">${s.death_count || 0}</td>
+          </tr>`
+        ).join("");
+        wrap.innerHTML = `<table class="share-splits-table">
+          <thead><tr><th>#</th><th>Split</th><th>Time</th><th>Deaths</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      } catch {}
+    }
+    loadSplits();
+  </script>
+</body>
+</html>

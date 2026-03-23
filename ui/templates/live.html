@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>SMW Tracker — Live</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="/static/css/app.css?v=3" rel="stylesheet">
+  <link href="/static/css/app.css?v=4" rel="stylesheet">
   <script src="/static/js/sounds.js?v=2"></script>
 </head>
 <body>
@@ -43,6 +43,14 @@
           <div class="ls-timer-wrap">
             <div class="ls-timer" id="lv-timer">0:00.00</div>
             <div class="ls-pace muted" id="lv-pace"></div>
+            <div id="pb-celebration" class="pb-celebration hidden">
+              <div class="pb-text">🎉 NEW PERSONAL BEST! 🎉</div>
+            </div>
+          </div>
+
+          <!-- Share button (shown after run complete) -->
+          <div id="share-run-wrap" class="hidden" style="text-align:center;margin:8px 0;">
+            <a id="share-run-link" href="#" target="_blank" class="landing-btn-primary" style="font-size:0.85rem;padding:6px 18px;">Share This Run</a>
           </div>
 
           <div class="ls-splits-wrap">
@@ -417,16 +425,34 @@
       // Run complete
       if (newData.run_complete && !prevIsComplete) {
         const totalMs = splits.reduce((s, x) => s + (x.split_ms || 0), 0);
-        if (newData.pb_total_ms && totalMs < newData.pb_total_ms) {
+        const isPB = newData.pb_total_ms && totalMs < newData.pb_total_ms;
+        if (isPB) {
           SFX.play("pb");
+          // Show PB celebration
+          const cel = document.getElementById("pb-celebration");
+          if (cel) { cel.classList.remove("hidden"); setTimeout(() => cel.classList.add("hidden"), 8000); }
         } else {
           SFX.play("complete");
         }
+        // Show share link (find session_id from payload)
+        if (newData.id) {
+          const shareWrap = document.getElementById("share-run-wrap");
+          const shareLink = document.getElementById("share-run-link");
+          if (shareWrap && shareLink) {
+            shareLink.href = `/run/${newData.id}`;
+            shareWrap.classList.remove("hidden");
+          }
+        }
       }
 
-      // Run start
+      // Run start / reset
       if (splits.length === 0 && prevSplitCount > 0) {
         SFX.play("start");
+        // Hide share link and PB celebration on reset
+        const shareWrap = document.getElementById("share-run-wrap");
+        if (shareWrap) shareWrap.classList.add("hidden");
+        const cel = document.getElementById("pb-celebration");
+        if (cel) cel.classList.add("hidden");
       }
 
       prevSplitCount = splits.length;

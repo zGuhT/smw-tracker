@@ -217,3 +217,41 @@ def compare_runs(game_name: str, run_a: int = Query(...), run_b: int = Query(...
         "run_a": a, "run_b": b, "comparison": comparison,
         "total_diff_ms": a["total_ms"] - b["total_ms"] if a["total_ms"] and b["total_ms"] else None,
     }
+
+
+@router.get("/run/{session_id}")
+def get_run_detail(session_id: int):
+    """Get a completed run's details for sharing."""
+    from core.level_names import resolve_level_name
+
+    session = db.fetchone(
+        "SELECT s.*, u.username, u.display_name FROM sessions s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?",
+        (session_id,),
+    )
+    if not session:
+        return {"error": "Run not found"}
+
+    splits = db.fetchall(
+        """SELECT level_id, COALESCE(level_name, level_id) AS level_name,
+                  split_ms, death_count
+           FROM level_splits WHERE session_id = ? AND game_name = ?
+           ORDER BY entered_at""",
+        (session_id, session["game_name"]),
+    )
+    for s in splits:
+        s["level_name"] = resolve_level_name(s["level_id"], session["game_name"])
+
+    total_ms = sum(s["split_ms"] for s in splits)
+    total_deaths = sum(s["death_count"] for s in splits)
+
+    return {
+        "session_id": session_id,
+        "game_name": session["game_name"],
+        "username": session.get("username"),
+        "display_name": session.get("display_name"),
+        "start_time": session["start_time"],
+        "total_ms": total_ms,
+        "total_deaths": total_deaths,
+        "levels_completed": len(splits),
+        "splits": splits,
+    }

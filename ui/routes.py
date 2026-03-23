@@ -142,3 +142,51 @@ def live_page(request: Request):
 @router.get("/stats-page", response_class=HTMLResponse)
 def stats_page(request: Request):
     return templates.TemplateResponse("stats.html", _ctx(request))
+
+
+@router.get("/run/{session_id}", response_class=HTMLResponse)
+def share_run_page(request: Request, session_id: int):
+    """Shareable run page with OG meta tags for social previews."""
+    from core import db
+    from core.level_names import resolve_level_name
+
+    session = db.fetchone(
+        "SELECT s.*, u.username, u.display_name FROM sessions s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?",
+        (session_id,),
+    )
+    if not session:
+        return JSONResponse({"error": "Run not found"}, status_code=404)
+
+    splits = db.fetchall(
+        "SELECT level_id, split_ms, death_count FROM level_splits WHERE session_id = ? AND game_name = ? ORDER BY entered_at",
+        (session_id, session["game_name"]),
+    )
+    total_ms = sum(s["split_ms"] for s in splits)
+    total_deaths = sum(s["death_count"] for s in splits)
+
+    # Format time for display
+    total_sec = total_ms // 1000
+    mins = total_sec // 60
+    secs = total_sec % 60
+    frac = (total_ms % 1000) // 10
+    time_str = f"{mins}:{secs:02d}.{frac:02d}" if mins else f"{secs}.{frac:02d}"
+
+    runner = session.get("display_name") or session.get("username") or "Unknown"
+    game = session["game_name"]
+    title = f"{runner} — {time_str} on {game}"
+    description = f"{len(splits)} levels completed with {total_deaths} deaths"
+
+    return templates.TemplateResponse("share_run.html", _ctx(
+        request,
+        session_id=session_id,
+        game_name=game,
+        runner=runner,
+        username=session.get("username"),
+        time_str=time_str,
+        total_ms=total_ms,
+        total_deaths=total_deaths,
+        levels_completed=len(splits),
+        start_time=session["start_time"],
+        og_title=title,
+        og_description=description,
+    ))
