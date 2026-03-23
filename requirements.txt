@@ -1,6 +1,6 @@
-fastapi
+fastapi==0.115.6
 uvicorn[standard]
-jinja2<3.2
+jinja2
 requests
 pydantic
 websocket-client

@@ -31,31 +31,31 @@ def home(request: Request):
         user = getattr(request.state, "auth_user", None)
         if user:
             return RedirectResponse(f"/u/{user['username']}", status_code=302)
-    return templates.TemplateResponse(name="landing.html", context=_ctx(request))
+    return templates.TemplateResponse("landing.html", _ctx(request))
 
 
 @router.get("/download", response_class=HTMLResponse)
 def download_page(request: Request):
     """Download/install instructions page (placeholder)."""
-    return templates.TemplateResponse(name="download.html", context=_ctx(request))
+    return templates.TemplateResponse("download.html", _ctx(request))
 
 
 @router.get("/games", response_class=HTMLResponse)
 def games_library_page(request: Request):
     """Public games library — browse all games."""
-    return templates.TemplateResponse(name="games_library.html", context=_ctx(request))
+    return templates.TemplateResponse("games_library.html", _ctx(request))
 
 
 @router.get("/leaderboards", response_class=HTMLResponse)
 def leaderboards_page(request: Request):
     """Public leaderboards page."""
-    return templates.TemplateResponse(name="leaderboard.html", context=_ctx(request))
+    return templates.TemplateResponse("leaderboard.html", _ctx(request))
 
 
 @router.get("/auth/page", response_class=HTMLResponse)
 def auth_page(request: Request):
     turnstile_key = os.environ.get("TURNSTILE_SITE_KEY", "")
-    return templates.TemplateResponse(name="auth.html", context=_ctx(request, turnstile_site_key=turnstile_key))
+    return templates.TemplateResponse("auth.html", _ctx(request, turnstile_site_key=turnstile_key))
 
 
 # ── User pages (public viewing, user-scoped) ──
@@ -70,7 +70,7 @@ def user_profile_page(request: Request, username: str):
     # Check if this is the logged-in user viewing their own profile
     auth_user = getattr(request.state, "auth_user", None)
     is_own_profile = auth_user and auth_user["id"] == user["id"]
-    return templates.TemplateResponse(name="profile.html", context=_ctx(
+    return templates.TemplateResponse("profile.html", _ctx(
         request,
         profile_user_id=user["id"],
         profile_username=user["username"],
@@ -87,7 +87,7 @@ def user_account_page(request: Request, username: str):
         return RedirectResponse("/auth/page?login", status_code=302)
     from core import db
     full_user = db.fetchone("SELECT * FROM users WHERE id = ?", (auth_user["id"],))
-    return templates.TemplateResponse(name="account.html", context=_ctx(
+    return templates.TemplateResponse("account.html", _ctx(
         request,
         account_user=full_user,
     ))
@@ -100,7 +100,7 @@ def user_game_detail_page(request: Request, username: str, game_name: str):
     user = get_user_by_username(username)
     if not user:
         return JSONResponse({"error": "User not found"}, status_code=404)
-    return templates.TemplateResponse(name="game.html", context=_ctx(
+    return templates.TemplateResponse("game.html", _ctx(
         request,
         game_name=game_name,
         profile_user_id=user["id"],
@@ -116,7 +116,7 @@ def game_detail_page(request: Request, game_name: str):
     auth_user = getattr(request.state, "auth_user", None)
     if auth_user:
         return RedirectResponse(f"/u/{auth_user['username']}/game/{game_name}", status_code=302)
-    return templates.TemplateResponse(name="game.html", context=_ctx(
+    return templates.TemplateResponse("game.html", _ctx(
         request, game_name=game_name,
         profile_user_id=None, profile_username=None,
     ))
@@ -124,21 +124,21 @@ def game_detail_page(request: Request, game_name: str):
 
 @router.get("/game/{game_name}/setup", response_class=HTMLResponse)
 def game_setup_page(request: Request, game_name: str):
-    return templates.TemplateResponse(name="setup.html", context=_ctx(request, game_name=game_name))
+    return templates.TemplateResponse("setup.html", _ctx(request, game_name=game_name))
 
 
 # ── Legacy/admin pages ──
 
 @router.get("/overlay", response_class=HTMLResponse)
 def overlay_page(request: Request):
-    return templates.TemplateResponse(name="overlay.html", context=_ctx(request))
+    return templates.TemplateResponse("overlay.html", _ctx(request))
 
 
 @router.get("/live", response_class=HTMLResponse)
 def live_page(request: Request):
-    return templates.TemplateResponse(name="live.html", context=_ctx(request))
+    return templates.TemplateResponse("live.html", _ctx(request))
 
 
 @router.get("/stats-page", response_class=HTMLResponse)
 def stats_page(request: Request):
-    return templates.TemplateResponse(name="stats.html", context=_ctx(request))
+    return templates.TemplateResponse("stats.html", _ctx(request))
