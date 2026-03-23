@@ -18,9 +18,8 @@ from core.smw_levels import normalize_level_id
 from hardware.qusb_client import QUsb2SnesClient
 from hardware.smw_memory_map import (
     EXIT_STATE, GAME_MODE, KEYHOLE_TIMER, LEVEL_ID, LIVES, PLAYER_ANIM_STATE, PLAYER_X,
-    MENU_MODES, GAMEPLAY_MODES, LEVEL_END_MODES, IN_LEVEL_MODES,
-    OVERWORLD_MODES, LEVEL_TRANSITION_MODES,
-    ANIM_DEATH, ANIM_DYING_BOUNCE, ANIM_PIPE, ANIM_GOAL_WALK,
+    MENU_MODES, GAMEPLAY_MODES, LEVEL_END_MODES, LEVEL_GAMEPLAY_ONLY,
+    ANIM_DEATH, ANIM_DYING_BOUNCE,
 )
 from hardware.smw_detect import SMWDetector
 from hardware.tracker_client import TrackerClient
@@ -276,7 +275,7 @@ class SMWTracker:
         if (self.saw_menu
                 and self.last_game_mode is not None
                 and self.last_game_mode in MENU_MODES
-                and state.game_mode in IN_LEVEL_MODES
+                and state.game_mode in GAMEPLAY_MODES
                 and not self.run_started):
 
             delay_ms = 0
@@ -425,10 +424,10 @@ class SMWTracker:
                          and state.level_id != self.last_state.level_id)
         progressed_enough = self.active_level_best_x is not None and self.active_level_best_x >= 0x100
         new_level_valid = self._is_playable_level_id(state.level_id)
-        # Game mode should be in a normal gameplay mode (not transitioning)
+        # Game mode should be in active level gameplay (0x14 only, not transitioning)
         game_mode_stable = (state.game_mode is not None
-                            and state.game_mode in GAMEPLAY_MODES
-                            and self.last_state.game_mode in GAMEPLAY_MODES)
+                            and state.game_mode in LEVEL_GAMEPLAY_ONLY
+                            and self.last_state.game_mode in LEVEL_GAMEPLAY_ONLY)
 
         if level_changed and progressed_enough and new_level_valid and game_mode_stable:
             exit_type = "secret" if self.keyhole_latched else "normal"

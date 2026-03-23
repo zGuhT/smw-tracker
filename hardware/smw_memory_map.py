@@ -130,33 +130,33 @@ EXTENDED_FIELDS = [
 ]
 
 
-# ── Game mode classification ──
+# ── Game mode classification (for tracker state machine) ──
+# NOTE: These groupings are for the TRACKER's state machine, not strict SMW terminology.
+# The tracker needs broad "in game" vs "menu" classification.
 
 # Menu/title/loading modes (not in gameplay)
 MENU_MODES = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A}
 
+# "In game" modes — everything from overworld through level gameplay.
+# The tracker treats all of these as "game is running" for state machine purposes.
+# Includes: overworld (0B-0E), level transitions (0F-13), active gameplay (14)
+GAMEPLAY_MODES = {0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14}
+
+# Level end / game over modes
+LEVEL_END_MODES = {0x15, 0x16, 0x17}
+
+# Strictly "in a level playing" — game mode 0x14 only.
+# Used for exit detection Method 4 (level ID change must happen during actual gameplay)
+LEVEL_GAMEPLAY_ONLY = {0x14}
+
+# Level transition modes (door/pipe: 0F->10->11->12->13->14)
+LEVEL_TRANSITION_MODES = {0x0F, 0x10, 0x11, 0x12, 0x13}
+
 # Overworld modes
 OVERWORLD_MODES = {0x0B, 0x0C, 0x0D, 0x0E}
 
-# Level loading / transition modes (door/pipe transitions pass through these)
-LEVEL_TRANSITION_MODES = {0x0F, 0x10, 0x11, 0x12, 0x13}
-
-# Active gameplay
-GAMEPLAY_MODES = {0x14}
-
-# Game over sequence
-GAME_OVER_MODES = {0x15, 0x16, 0x17}
-
-# Level end modes (goal tape walk, castle destruction, etc)
-LEVEL_END_MODES = {0x15, 0x16, 0x17}
-
-# Credits / ending
-CREDITS_MODES = {0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
-                 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29}
-
-# All "in level" modes (gameplay + transitions + prepare)
-# The tracker should stay active during these
-IN_LEVEL_MODES = LEVEL_TRANSITION_MODES | GAMEPLAY_MODES | {0x12, 0x13}
+# All "in level" modes (for tracker to stay active)
+IN_LEVEL_MODES = LEVEL_TRANSITION_MODES | LEVEL_GAMEPLAY_ONLY
 
 
 # ── Player animation constants ──
