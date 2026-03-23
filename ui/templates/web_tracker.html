@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Web Tracker — SMW Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="/static/css/app.css?v=4" rel="stylesheet">
+  <style>
+    .wt-status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .wt-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .wt-dot.off { background: var(--muted); }
+    .wt-dot.connecting { background: var(--gold); animation: wt-blink 1s infinite; }
+    .wt-dot.connected { background: var(--success); }
+    .wt-dot.error { background: var(--danger); }
+    @keyframes wt-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .wt-log { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 0.78rem; max-height: 300px; overflow-y: auto; line-height: 1.6; }
+    .wt-log .info { color: var(--accent); }
+    .wt-log .warn { color: var(--gold); }
+    .wt-log .err { color: var(--danger); }
+    .wt-log .dim { color: var(--muted); }
+    .wt-game { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+    .wt-level { color: var(--text); }
+    .wt-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin: 12px 0; }
+    .wt-stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; text-align: center; }
+    .wt-stat-val { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; }
+    .wt-stat-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+    .wt-controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+    .wt-btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; font-size: 0.85rem; }
+    .wt-btn:hover { border-color: var(--accent); }
+    .wt-btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+    .wt-btn.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>SMW://TRACKER</h1>
+      <nav>
+        <a href="/u/{{ auth_user.username }}">Home</a>
+        <a href="/games">Games</a>
+        <a href="/leaderboards">Leaderboards</a>
+        <a href="/download">Download</a>
+        <a href="/tracker" class="active">Web Tracker</a>
+        <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
+      </nav>
+    </header>
+
+    <main style="max-width:720px;margin:0 auto;">
+      <section class="card">
+        <h2 style="color:var(--accent);margin-bottom:4px;">Web Tracker</h2>
+        <p class="muted" style="margin-bottom:16px;">Browser-based tracker — connects to your local QUsb2Snes. No Python install needed.</p>
+
+        <!-- Connection Status -->
+        <div class="wt-status">
+          <div class="wt-dot off" id="wt-qusb-dot"></div>
+          <span id="wt-qusb-status">QUsb2Snes: Not connected</span>
+        </div>
+        <div class="wt-status">
+          <div class="wt-dot off" id="wt-cloud-dot"></div>
+          <span id="wt-cloud-status">Cloud: Not connected</span>
+        </div>
+
+        <div class="wt-controls">
+          <button class="wt-btn primary" id="btn-connect" onclick="startTracker()">Connect</button>
+          <button class="wt-btn danger" id="btn-disconnect" onclick="stopTracker()" disabled>Stop</button>
+        </div>
+      </section>
+
+      <!-- Game State -->
+      <section class="card" id="game-state-card" style="display:none;">
+        <div class="wt-game" id="wt-game">—</div>
+        <div class="wt-level" id="wt-level">—</div>
+        <div class="wt-stats">
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-splits">0</div><div class="wt-stat-label">Splits</div></div>
+          <div class="wt-stat"><div class="wt-stat-val deaths-color" id="wt-deaths">0</div><div class="wt-stat-label">Deaths</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-mode">—</div><div class="wt-stat-label">Game Mode</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-state">idle</div><div class="wt-stat-label">Tracker</div></div>
+        </div>
+        <div style="text-align:center;margin-top:8px;">
+          <a id="wt-live-link" href="/live?user={{ user_id }}" target="_blank" class="wt-btn" style="text-decoration:none;display:inline-block;">Open Live Page →</a>
+        </div>
+      </section>
+
+      <!-- Log -->
+      <section class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Log</span>
+          <button class="wt-btn" onclick="document.getElementById('wt-log').innerHTML=''" style="padding:2px 8px;font-size:0.75rem;">Clear</button>
+        </div>
+        <div class="wt-log" id="wt-log"></div>
+      </section>
+
+      <section class="card" style="text-align:center;">
+        <p class="muted" style="font-size:0.82rem;line-height:1.5;">
+          Make sure <a href="https://skarsnik.github.io/QUsb2snes/" style="color:var(--accent);">QUsb2Snes</a> is running on your computer with your SNES device connected.
+          The browser connects directly to <code style="color:var(--accent);">ws://localhost:23074</code>.
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+  // ══════════════════════════════════════════════
+  // SMW Web Tracker — Browser-based QUsb2Snes client
+  // ══════════════════════════════════════════════
+
+  const API_KEY = {{ api_key | tojson }};
+  const USER_ID = {{ user_id }};
+  const QUSB_URL = "ws://localhost:23074";
+  const PUSH_URL = "/live/push";
+  const POLL_MS = 250;  // 4x per second
+
+  // ── SMW Memory Addresses (QUsb2Snes mapped) ──
+  const ADDR = {
+    LEVEL_ID:    0xF513BF,  // Translevel number
+    PLAYER_X:    0xF50094,  // Player X position (16-bit)
+    PLAYER_ANIM: 0xF50071,  // Player animation trigger
+    LIVES:       0xF50DBE,  // Lives counter
+    EXIT_STATE:  0xF51493,  // End level timer
+    KEYHOLE:     0xF51434,  // Keyhole timer
+    GAME_MODE:   0xF50100,  // Game mode
+  };
+  // Read all core fields in one batch (contiguous isn't possible, so we read individually)
+
+  const MENU_MODES = new Set([0,1,2,3,4,5,6,7,8,9,0xA]);
+  const GAMEPLAY_MODES = new Set([0xB,0xC,0xD,0xE,0xF,0x10,0x11,0x12,0x13,0x14]);
+  const LEVEL_END_MODES = new Set([0x15,0x16,0x17]);
+  const ANIM_DEATH = 0x09;
+  const ANIM_DYING_BOUNCE = 0x01;
+
+  // ── State ──
+  let ws = null;
+  let running = false;
+  let pollTimer = null;
+  let pushTimer = null;
+  let deviceName = null;
+  let romPath = null;
+  let gameName = null;
+
+  // Tracker state machine
+  let trackerState = "idle";  // idle | armed | playing
+  let lastState = null;
+  let armedSince = null;
+  let lastDeathTime = 0;
+  let lastExitTime = 0;
+  let lastProgressTime = 0;
+  let activeLevelDeaths = 0;
+  let activeLevelBestX = null;
+  let splitStartTime = null;
+  let runStarted = false;
+  let sawMenu = false;
+  let lastGameMode = null;
+  let exitedLevelId = null;
+
+  // Session data for cloud push
+  let sessionSplits = [];
+  let deathEvents = [];
+  let deathsThisSession = 0;
+  let currentLevelId = null;
+  let currentLevelName = null;
+  let currentX = null;
+  let isActive = false;
+  let startTime = null;
+
+  // ── Logging ──
+  function wtLog(msg, cls = "info") {
+    const el = document.getElementById("wt-log");
+    const time = new Date().toLocaleTimeString();
+    el.innerHTML += `<div class="${cls}"><span class="dim">${time}</span> ${msg}</div>`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ── QUsb2Snes Protocol ──
+  function sendCmd(opcode, operands = []) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ Opcode: opcode, Space: "SNES", Operands: operands }));
+  }
+
+  function waitForMessage() {
+    return new Promise((resolve, reject) => {
+      if (!ws) return reject("No WebSocket");
+      const timeout = setTimeout(() => reject("Timeout"), 3000);
+      ws.onmessage = (e) => {
+        clearTimeout(timeout);
+        resolve(e.data);
+      };
+    });
+  }
+
+  async function qusbRecvJSON() {
+    const data = await waitForMessage();
+    if (data instanceof Blob) throw new Error("Expected JSON, got binary");
+    return JSON.parse(data);
+  }
+
+  async function qusbRecvBinary(size) {
+    const data = await waitForMessage();
+    if (typeof data === "string") throw new Error("Expected binary, got text: " + data);
+    return new Uint8Array(await data.arrayBuffer());
+  }
+
+  async function readU8(addr) {
+    sendCmd("GetAddress", [addr.toString(16).toUpperCase(), "1"]);
+    const buf = await qusbRecvBinary(1);
+    return buf[0];
+  }
+
+  async function readU16LE(addr) {
+    sendCmd("GetAddress", [addr.toString(16).toUpperCase(), "2"]);
+    const buf = await qusbRecvBinary(2);
+    return buf[0] | (buf[1] << 8);
+  }
+
+  async function getInfo() {
+    sendCmd("Info");
+    return await qusbRecvJSON();
+  }
+
+  // ── Connection ──
+  async function startTracker() {
+    if (running) return;
+    running = true;
+    document.getElementById("btn-connect").disabled = true;
+    document.getElementById("btn-disconnect").disabled = false;
+
+    setDot("wt-qusb-dot", "connecting");
+    setStatus("wt-qusb-status", "Connecting to QUsb2Snes...");
+    wtLog("Connecting to QUsb2Snes at " + QUSB_URL);
+
+    try {
+      ws = new WebSocket(QUSB_URL);
+      await new Promise((resolve, reject) => {
+        ws.onopen = resolve;
+        ws.onerror = () => reject("Connection failed");
+        setTimeout(() => reject("Connection timeout"), 5000);
+      });
+
+      // Name ourselves
+      sendCmd("Name", ["SMW Tracker Web"]);
+      await sleep(100);
+
+      // Get device list
+      sendCmd("DeviceList");
+      const deviceReply = await qusbRecvJSON();
+      const devices = deviceReply.Results || [];
+      if (!devices.length) {
+        throw new Error("No devices found. Is your SNES connected?");
+      }
+
+      // Attach to first device
+      deviceName = devices[0];
+      sendCmd("Attach", [deviceName]);
+      await sleep(200);
+
+      setDot("wt-qusb-dot", "connected");
+      setStatus("wt-qusb-status", `QUsb2Snes: ${deviceName}`);
+      setDot("wt-cloud-dot", "connected");
+      setStatus("wt-cloud-status", "Cloud: Pushing to smwtracker.com");
+      wtLog(`Attached to ${deviceName}`, "info");
+
+      // Reset state
+      trackerState = "idle";
+      lastState = null;
+      sessionSplits = [];
+      deathEvents = [];
+      deathsThisSession = 0;
+      isActive = false;
+      startTime = null;
+
+      document.getElementById("game-state-card").style.display = "";
+
+      // Start polling
+      pollLoop();
+      pushTimer = setInterval(pushToCloud, 500);
+
+    } catch (err) {
+      wtLog(`Connection failed: ${err}`, "err");
+      setDot("wt-qusb-dot", "error");
+      setStatus("wt-qusb-status", `QUsb2Snes: ${err}`);
+      stopTracker();
+    }
+  }
+
+  function stopTracker() {
+    running = false;
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
+    if (ws) { try { ws.close(); } catch {} ws = null; }
+    document.getElementById("btn-connect").disabled = false;
+    document.getElementById("btn-disconnect").disabled = true;
+    setDot("wt-qusb-dot", "off");
+    setStatus("wt-qusb-status", "QUsb2Snes: Disconnected");
+    setDot("wt-cloud-dot", "off");
+    setStatus("wt-cloud-status", "Cloud: Disconnected");
+    wtLog("Tracker stopped", "warn");
+  }
+
+  // ── Poll Loop ──
+  async function pollLoop() {
+    if (!running) return;
+    try {
+      await processOnce();
+    } catch (err) {
+      wtLog(`Poll error: ${err.message || err}`, "err");
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        wtLog("Connection lost, stopping", "err");
+        stopTracker();
+        return;
+      }
+    }
+    if (running) pollTimer = setTimeout(pollLoop, POLL_MS);
+  }
+
+  async function processOnce() {
+    const now = Date.now() / 1000;
+
+    // Read ROM info periodically
+    if (!romPath || Math.random() < 0.02) {
+      try {
+        const info = await getInfo();
+        const results = info.Results || [];
+        if (results.length >= 3) {
+          const newPath = (results[2] || "").replace(/\x00/g, "").trim();
+          if (newPath && newPath !== romPath) {
+            romPath = newPath;
+            gameName = deriveGameName(romPath);
+            wtLog(`ROM: ${gameName} (${romPath})`, "info");
+          }
+        }
+      } catch {}
+    }
+
+    if (!gameName || romPath === "/sd2snes/menu.bin" || romPath === "menu.bin") {
+      if (isActive) {
+        isActive = false;
+        trackerState = "idle";
+        updateUI(null);
+      }
+      return;
+    }
+
+    // Read core memory
+    const levelId = await readU8(ADDR.LEVEL_ID);
+    const playerX = await readU16LE(ADDR.PLAYER_X);
+    const playerAnim = await readU8(ADDR.PLAYER_ANIM);
+    const exitState = await readU8(ADDR.EXIT_STATE);
+    const keyhole = await readU8(ADDR.KEYHOLE);
+    const lives = await readU8(ADDR.LIVES);
+    const gameMode = await readU8(ADDR.GAME_MODE);
+
+    const levelIdHex = levelId.toString(16).toUpperCase().padStart(2, "0");
+    const state = { levelId: levelIdHex, playerX, playerAnim, exitState, keyhole, lives, gameMode };
+
+    // Update tracker state machine
+    updateStateMachine(state, now);
+
+    // Update UI
+    currentLevelId = levelIdHex;
+    currentX = playerX;
+    updateUI(state);
+
+    lastState = state;
+    lastGameMode = gameMode;
+  }
+
+  // ── State Machine ──
+  function updateStateMachine(state, now) {
+    const validLevel = isPlayableLevel(state.levelId);
+
+    // Run auto-start: menu → gameplay transition
+    if (MENU_MODES.has(state.gameMode)) sawMenu = true;
+    if (sawMenu && lastGameMode !== null && MENU_MODES.has(lastGameMode)
+        && GAMEPLAY_MODES.has(state.gameMode) && !runStarted) {
+      runStarted = true;
+      sawMenu = false;
+      splitStartTime = now;
+      startTime = new Date().toISOString();
+      isActive = true;
+      sessionSplits = [];
+      deathEvents = [];
+      deathsThisSession = 0;
+      activeLevelDeaths = 0;
+      activeLevelBestX = null;
+      exitedLevelId = null;
+      wtLog(`Run auto-started (mode ${lastGameMode.toString(16)}→${state.gameMode.toString(16)})`, "info");
+    }
+
+    // Track state: idle → armed → playing
+    if (trackerState === "idle") {
+      if (validLevel && state.playerX >= 0) {
+        trackerState = "armed";
+        armedSince = now;
+        isActive = true;
+        if (!startTime) startTime = new Date().toISOString();
+      }
+    } else if (trackerState === "armed") {
+      if (!validLevel) {
+        trackerState = "idle";
+      } else if (now - armedSince >= 1.0) {
+        trackerState = "playing";
+        wtLog(`Playing: ${gameName}`, "info");
+      }
+    } else if (trackerState === "playing") {
+      if (!validLevel && state.gameMode !== 0x14) {
+        // Grace period for transitions
+      }
+    }
+
+    if (trackerState !== "playing" || !lastState) return;
+
+    // ── Exit detection ──
+    if (validLevel && lastState && isPlayableLevel(lastState.levelId)) {
+      // Suppress exits after death
+      if (now - lastDeathTime < 6.0) { /* skip */ }
+      else if (now - lastExitTime < 4.0) { /* cooldown */ }
+      else if (lastState.levelId === exitedLevelId) { /* already exited */ }
+      else {
+        let exitDetected = false;
+        let exitType = "normal";
+
+        // Method 1: Keyhole
+        if (state.keyhole > 0 && (lastState.keyhole === 0 || lastState.keyhole === undefined)) {
+          exitDetected = true; exitType = "secret";
+          wtLog(`Exit: keyhole (timer=${state.keyhole})`, "info");
+        }
+        // Method 2: Exit state byte
+        if (!exitDetected && state.exitState > 0 && lastState.exitState === 0) {
+          exitDetected = true;
+          wtLog(`Exit: goal tape`, "info");
+        }
+        // Method 3: Level-end mode
+        if (!exitDetected && LEVEL_END_MODES.has(state.gameMode) && !LEVEL_END_MODES.has(lastState.gameMode)) {
+          exitDetected = true; exitType = "special";
+          wtLog(`Exit: level-end mode (${state.gameMode.toString(16)})`, "info");
+        }
+
+        if (exitDetected) {
+          const splitMs = splitStartTime ? Math.round((now - splitStartTime) * 1000) : 0;
+          const splitKey = exitType === "secret" ? `${lastState.levelId}:secret` : lastState.levelId;
+          sessionSplits.push({
+            level_id: splitKey, level_name: splitKey,
+            split_ms: splitMs, death_count: activeLevelDeaths,
+            entered_at: splitStartTime || now, exited_at: now,
+          });
+          wtLog(`Split: ${splitKey} = ${splitMs}ms (${activeLevelDeaths} deaths)`, "info");
+          splitStartTime = now;
+          activeLevelDeaths = 0;
+          activeLevelBestX = null;
+          lastExitTime = now;
+          exitedLevelId = lastState.levelId;
+        }
+      }
+    }
+
+    // ── Level enter ──
+    if (lastState && state.levelId !== lastState.levelId && validLevel) {
+      if (exitedLevelId !== state.levelId) {
+        wtLog(`Level enter: ${state.levelId}`, "dim");
+        activeLevelDeaths = 0;
+        activeLevelBestX = null;
+        if (!splitStartTime) splitStartTime = now;
+      }
+    }
+
+    // ── Best X tracking ──
+    if (validLevel && state.playerX > (activeLevelBestX || 0)) {
+      activeLevelBestX = state.playerX;
+    }
+
+    // ── Death detection ──
+    if (validLevel && lastState && (now - lastDeathTime) >= 3.0) {
+      const livesDropped = state.lives !== undefined && lastState.lives !== undefined && state.lives < lastState.lives;
+      const deathAnim = (state.playerAnim === ANIM_DEATH || state.playerAnim === ANIM_DYING_BOUNCE)
+          && lastState.playerAnim !== ANIM_DEATH && lastState.playerAnim !== ANIM_DYING_BOUNCE;
+
+      if (livesDropped || deathAnim) {
+        activeLevelDeaths++;
+        deathsThisSession++;
+        deathEvents.push({
+          level_id: state.levelId, level_name: state.levelId,
+          x_position: state.playerX, event_time: new Date().toISOString(),
+        });
+        lastDeathTime = now;
+        wtLog(`Death #${deathsThisSession} at ${state.levelId} x=${state.playerX}`, "warn");
+      }
+    }
+  }
+
+  // ── Cloud Push ──
+  async function pushToCloud() {
+    if (!isActive || !gameName) return;
+    try {
+      const payload = {
+        id: null, game_name: gameName, platform: "SNES",
+        start_time: startTime, is_active: true,
+        current_level_id: currentLevelId,
+        current_level_name: currentLevelId,
+        current_x_position: currentX,
+        deaths_this_session: deathsThisSession,
+        death_events: deathEvents,
+        splits: sessionSplits,
+        run_levels: [], run_name: null,
+        pb_splits: [], pb_total_ms: null, sum_of_best_ms: null,
+        best_segments: {},
+        run_started: runStarted,
+        run_complete: false,
+        server_time: Date.now() / 1000,
+      };
+
+      const res = await fetch(PUSH_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": API_KEY,
+          "X-User-Id": String(USER_ID),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) wtLog("Cloud push rejected: bad API key", "err");
+      }
+    } catch (err) {
+      // Silent — cloud push failures shouldn't stop tracking
+    }
+  }
+
+  // ── Helpers ──
+  function isPlayableLevel(levelId) {
+    if (!levelId) return false;
+    const n = parseInt(levelId, 16);
+    return !isNaN(n) && n > 0 && n < 0x60;
+  }
+
+  function deriveGameName(path) {
+    if (!path) return null;
+    let name = path.split("/").pop().split("\\").pop();
+    name = name.replace(/\.(sfc|smc|bin|rom)$/i, "");
+    name = name.replace(/[_]/g, " ").replace(/\s+/g, " ").trim();
+    return name || null;
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function setDot(id, cls) {
+    const el = document.getElementById(id);
+    el.className = "wt-dot " + cls;
+  }
+  function setStatus(id, text) {
+    document.getElementById(id).textContent = text;
+  }
+
+  function updateUI(state) {
+    document.getElementById("wt-game").textContent = gameName || "—";
+    document.getElementById("wt-level").textContent = state ? `Level: ${state.levelId}` : "—";
+    document.getElementById("wt-splits").textContent = sessionSplits.length;
+    document.getElementById("wt-deaths").textContent = deathsThisSession;
+    document.getElementById("wt-mode").textContent = state ? `0x${state.gameMode.toString(16).toUpperCase().padStart(2,"0")}` : "—";
+    document.getElementById("wt-state").textContent = trackerState;
+  }
+  </script>
+</body>
+</html>
