@@ -30,47 +30,71 @@ def _extract_api_key(request: Request) -> str | None:
 
 
 def _check_api_key(request: Request) -> bool:
-    """Validate the tracker's API key against the users table.
+    """Validate the tracker's API key or session cookie.
 
-    Accepts any valid user API key from the database.
-    Falls back to SMW_API_KEY env var for backward compatibility.
-    If neither is configured, allows all (local dev).
+    Accepts:
+    1. API key in Authorization header or query param (for Python client)
+    2. Session cookie (for browser-based web tracker)
+    3. Falls back to SMW_API_KEY env var for backward compatibility
     """
+    # Method 1: API key
     key = _extract_api_key(request)
-    if not key:
-        # No key provided — only allow if no auth is configured at all
+    if key:
+        try:
+            from core.user_service import get_user_by_api_key
+            user = get_user_by_api_key(key)
+            if user:
+                return True
+        except Exception:
+            pass
+        # Legacy single env var
         env_key = os.environ.get("SMW_API_KEY", "")
-        return not env_key  # Allow if no env key set (local dev)
-
-    # Check against users table first
-    try:
-        from core.user_service import get_user_by_api_key
-        user = get_user_by_api_key(key)
-        if user:
+        if env_key and key == env_key:
             return True
-    except Exception:
-        pass
 
-    # Fall back to legacy single env var
-    env_key = os.environ.get("SMW_API_KEY", "")
-    if env_key and key == env_key:
-        return True
+    # Method 2: Session cookie (browser-based tracker)
+    session_token = request.cookies.get("smw_session")
+    if session_token:
+        try:
+            from core.auth_service import get_user_from_session_token
+            user = get_user_from_session_token(session_token)
+            if user:
+                return True
+        except Exception:
+            pass
+
+    # No auth provided — only allow if no auth is configured at all (local dev)
+    if not key and not session_token:
+        env_key = os.environ.get("SMW_API_KEY", "")
+        return not env_key
 
     return False
 
 
 def _resolve_user_id(request: Request) -> str:
-    """Resolve user_id from API key via the users table, falling back to default."""
+    """Resolve user_id from API key or session cookie, falling back to default."""
+    # Method 1: API key
     key = _extract_api_key(request)
-    if not key:
-        return DEFAULT_USER
-    try:
-        from core.user_service import get_user_by_api_key
-        user = get_user_by_api_key(key)
-        if user:
-            return str(user["id"])
-    except Exception:
-        pass
+    if key:
+        try:
+            from core.user_service import get_user_by_api_key
+            user = get_user_by_api_key(key)
+            if user:
+                return str(user["id"])
+        except Exception:
+            pass
+
+    # Method 2: Session cookie
+    session_token = request.cookies.get("smw_session")
+    if session_token:
+        try:
+            from core.auth_service import get_user_from_session_token
+            user = get_user_from_session_token(session_token)
+            if user:
+                return str(user["id"])
+        except Exception:
+            pass
+
     return DEFAULT_USER
 
 

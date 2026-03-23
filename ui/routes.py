@@ -135,12 +135,9 @@ def web_tracker_page(request: Request):
     auth_user = getattr(request.state, "auth_user", None)
     if not auth_user:
         return RedirectResponse("/auth/page?login&next=/tracker", status_code=302)
-    from core import db
-    full_user = db.fetchone("SELECT * FROM users WHERE id = ?", (auth_user["id"],))
     return templates.TemplateResponse("web_tracker.html", _ctx(
         request,
         user_id=auth_user["id"],
-        api_key=full_user.get("api_key") if full_user else "",
     ))
 
 

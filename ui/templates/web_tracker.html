@@ -104,7 +104,6 @@
   // SMW Web Tracker — Browser-based QUsb2Snes client
   // ══════════════════════════════════════════════
 
-  const API_KEY = {{ api_key | tojson }};
   const USER_ID = {{ user_id }};
   const QUSB_URL = "ws://localhost:23074";
   const PUSH_URL = "/live/push";
@@ -509,11 +508,8 @@
 
       const res = await fetch(PUSH_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": API_KEY,
-          "X-User-Id": String(USER_ID),
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",  // Send session cookie
         body: JSON.stringify(payload),
       });
 
