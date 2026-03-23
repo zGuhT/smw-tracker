@@ -117,6 +117,89 @@ async def live_push(request: Request):
 # Cache for enrichment data (avoid querying DB on every push)
 _enrich_cache: dict[str, dict] = {}
 _enrich_cache_split_count: dict[str, int] = {}
+_auto_capture_done: set[str] = set()  # game names already auto-captured this session
+
+
+def _auto_capture_from_splits(game_name: str, splits: list[dict]) -> dict | None:
+    """Auto-create game_levels and a default run definition from incoming split data.
+
+    Called when a game has no run definition and splits are being pushed.
+    Creates levels with abbreviated names (e.g. PK_02) that the user can
+    rename later on the Setup page.
+
+    Returns the new run_config or None if creation failed.
+    """
+    if game_name in _auto_capture_done:
+        return None  # Already tried for this game, don't retry every push
+
+    import logging
+    log = logging.getLogger(__name__)
+
+    try:
+        from core.level_names import _abbreviate_game_name
+        from core.level_service import get_levels_for_game, create_level
+        from core.run_service import create_run, set_run_levels, get_default_run_config
+
+        abbrev = _abbreviate_game_name(game_name)
+
+        # Get unique level IDs from splits in order of appearance
+        seen = set()
+        ordered_level_ids = []
+        for s in splits:
+            lid = s.get("level_id", "")
+            # Strip :secret suffix for the base level
+            base_lid = lid.split(":")[0] if ":" in lid else lid
+            if base_lid and base_lid not in seen:
+                seen.add(base_lid)
+                ordered_level_ids.append(base_lid)
+
+        if not ordered_level_ids:
+            _auto_capture_done.add(game_name)
+            return None
+
+        # Check which levels already exist
+        existing = get_levels_for_game(game_name)
+        existing_ids = {gl["level_id"] for gl in existing if gl.get("level_id")}
+
+        # Create missing game_levels
+        new_levels_created = 0
+        for lid in ordered_level_ids:
+            if lid not in existing_ids:
+                auto_name = f"{abbrev}_{lid}"
+                create_level(game_name, level_name=auto_name, level_id=lid)
+                new_levels_created += 1
+
+        # Re-fetch all levels to get their DB IDs
+        all_levels = get_levels_for_game(game_name)
+        level_id_to_db_id = {gl["level_id"]: gl["id"] for gl in all_levels if gl.get("level_id")}
+
+        # Create a default run definition with all levels in split order
+        run = create_run(game_name, run_name="100%", is_default=True)
+        run_levels = []
+        for i, lid in enumerate(ordered_level_ids):
+            db_id = level_id_to_db_id.get(lid)
+            if db_id:
+                run_levels.append({
+                    "game_level_id": db_id,
+                    "exit_type": "normal",
+                    "sort_order": i,
+                })
+
+        if run_levels:
+            set_run_levels(run["id"], run_levels)
+
+        _auto_capture_done.add(game_name)
+        log.info("Auto-captured %d levels for %s (run: %s, %d new levels)",
+                 len(ordered_level_ids), game_name, run["run_name"], new_levels_created)
+
+        # Return the fresh config
+        return get_default_run_config(game_name)
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Auto-capture failed for %s: %s", game_name, exc)
+        _auto_capture_done.add(game_name)
+        return None
 
 
 def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | None) -> None:
@@ -143,6 +226,12 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
     # Build run_levels from cloud DB
     from core.run_service import get_default_run_config
     run_config = get_default_run_config(game_name)
+
+    # Auto-capture: if no run definition exists and we have splits,
+    # auto-create game_levels and a default run from the incoming split data.
+    # The user can then edit level names and exit types on the Setup page.
+    if not run_config and splits:
+        run_config = _auto_capture_from_splits(game_name, splits)
 
     enrichment = {}
 
