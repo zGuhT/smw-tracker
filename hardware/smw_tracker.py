@@ -18,17 +18,14 @@ from core.smw_levels import normalize_level_id
 from hardware.qusb_client import QUsb2SnesClient
 from hardware.smw_memory_map import (
     EXIT_STATE, GAME_MODE, KEYHOLE_TIMER, LEVEL_ID, LIVES, PLAYER_ANIM_STATE, PLAYER_X,
+    MENU_MODES, GAMEPLAY_MODES, LEVEL_END_MODES, IN_LEVEL_MODES,
+    OVERWORLD_MODES, LEVEL_TRANSITION_MODES,
+    ANIM_DEATH, ANIM_DYING_BOUNCE, ANIM_PIPE, ANIM_GOAL_WALK,
 )
 from hardware.smw_detect import SMWDetector
 from hardware.tracker_client import TrackerClient
 
 log = logging.getLogger(__name__)
-
-# Keep a minimal keyword list as documentation, actual detection uses SMWDetector
-MENU_MODES = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A}
-GAMEPLAY_MODES = {0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14}
-# Modes that indicate a level has ended (exit circle, keyhole, boss, switch palace)
-LEVEL_END_MODES = {0x15, 0x16, 0x17}
 
 
 @dataclass
@@ -211,7 +208,8 @@ class SMWTracker:
         if self.last_state and lives is not None and self.last_state.lives is not None:
             if lives < self.last_state.lives:
                 return True
-        if anim_state == 0x09:
+        # 0x09 = death animation, 0x01 = dying bounce (pit/lava)
+        if anim_state in (ANIM_DEATH, ANIM_DYING_BOUNCE):
             return True
         return False
 
@@ -278,7 +276,7 @@ class SMWTracker:
         if (self.saw_menu
                 and self.last_game_mode is not None
                 and self.last_game_mode in MENU_MODES
-                and state.game_mode in GAMEPLAY_MODES
+                and state.game_mode in IN_LEVEL_MODES
                 and not self.run_started):
 
             delay_ms = 0
@@ -573,7 +571,7 @@ class SMWTracker:
             return False
 
         # Death cooldown: SMW death sequence takes ~3-4 seconds
-        # (death anim → iris out → respawn). Use 3s cooldown to prevent
+        # (death anim → circle wipe → respawn). Use 3s cooldown to prevent
         # multiple signals from the same death being counted separately.
         DEATH_COOLDOWN = 3.0
         if (now - self.last_death_time) < DEATH_COOLDOWN:
@@ -583,18 +581,13 @@ class SMWTracker:
         lives_dropped = (state.lives is not None and self.last_state.lives is not None
                          and state.lives < self.last_state.lives)
 
-        # Method 2: Entered death animation (player_anim_state = 0x09)
-        entered_death_anim = (state.player_anim_state == 0x09
-                              and self.last_state.player_anim_state != 0x09)
+        # Method 2: Player animation trigger changed to death (0x09)
+        # $7E:0071 — the authoritative death signal from SMWCentral RAM map.
+        # Also check for 0x01 (dying bounce off screen — pit deaths, lava, etc).
+        entered_death_anim = (state.player_anim_state in (ANIM_DEATH, ANIM_DYING_BOUNCE)
+                              and self.last_state.player_anim_state not in (ANIM_DEATH, ANIM_DYING_BOUNCE))
 
-        # Method 3: Game mode transition to death sequence (0x12)
-        # Catches deaths in kaizo hacks with 0 lives.
-        game_mode_death = (state.game_mode == 0x12
-                           and self.last_state.game_mode is not None
-                           and self.last_state.game_mode != 0x12
-                           and self.last_state.game_mode in GAMEPLAY_MODES)
-
-        return lives_dropped or entered_death_anim or game_mode_death
+        return lives_dropped or entered_death_anim
 
     # ── Main loop ──
 
