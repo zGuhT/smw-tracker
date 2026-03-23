@@ -117,20 +117,20 @@ async def live_push(request: Request):
 # Cache for enrichment data (avoid querying DB on every push)
 _enrich_cache: dict[str, dict] = {}
 _enrich_cache_split_count: dict[str, int] = {}
-_auto_capture_done: set[str] = set()  # game names already auto-captured this session
+_auto_capture_split_count: dict[str, int] = {}  # last split count we checked for auto-capture
 
 
-def _auto_capture_from_splits(game_name: str, splits: list[dict]) -> dict | None:
-    """Auto-create game_levels and a default run definition from incoming split data.
+def _auto_capture_levels(game_name: str, splits: list[dict]) -> dict | None:
+    """Progressively auto-capture levels from incoming splits.
 
-    Called when a game has no run definition and splits are being pushed.
-    Creates levels with abbreviated names (e.g. PK_02) that the user can
-    rename later on the Setup page.
+    - If no run definition exists: create game_levels + default "100%" run
+    - If run exists but splits contain new level IDs: add the new levels to
+      game_levels and append them to the default run
 
-    Returns the new run_config or None if creation failed.
+    Returns the (possibly updated) run_config, or None.
     """
-    if game_name in _auto_capture_done:
-        return None  # Already tried for this game, don't retry every push
+    if not splits:
+        return None
 
     import logging
     log = logging.getLogger(__name__)
@@ -138,67 +138,104 @@ def _auto_capture_from_splits(game_name: str, splits: list[dict]) -> dict | None
     try:
         from core.level_names import _abbreviate_game_name
         from core.level_service import get_levels_for_game, create_level
-        from core.run_service import create_run, set_run_levels, get_default_run_config
+        from core.run_service import (
+            create_run, get_default_run_config, get_default_run_for_game,
+            get_run_levels, set_run_levels,
+        )
 
         abbrev = _abbreviate_game_name(game_name)
 
-        # Get unique level IDs from splits in order of appearance
-        seen = set()
-        ordered_level_ids = []
+        # Extract unique level IDs from splits in order
+        seen: set[str] = set()
+        ordered_split_ids: list[str] = []
         for s in splits:
             lid = s.get("level_id", "")
-            # Strip :secret suffix for the base level
             base_lid = lid.split(":")[0] if ":" in lid else lid
             if base_lid and base_lid not in seen:
                 seen.add(base_lid)
-                ordered_level_ids.append(base_lid)
+                ordered_split_ids.append(base_lid)
 
-        if not ordered_level_ids:
-            _auto_capture_done.add(game_name)
+        if not ordered_split_ids:
             return None
 
-        # Check which levels already exist
-        existing = get_levels_for_game(game_name)
-        existing_ids = {gl["level_id"] for gl in existing if gl.get("level_id")}
+        # Get existing game_levels and run config
+        existing_levels = get_levels_for_game(game_name)
+        existing_level_ids = {gl["level_id"] for gl in existing_levels if gl.get("level_id")}
+        run_config = get_default_run_config(game_name)
 
-        # Create missing game_levels
-        new_levels_created = 0
-        for lid in ordered_level_ids:
-            if lid not in existing_ids:
-                auto_name = f"{abbrev}_{lid}"
-                create_level(game_name, level_name=auto_name, level_id=lid)
-                new_levels_created += 1
+        # Find which split IDs are new (not in game_levels yet)
+        new_ids = [lid for lid in ordered_split_ids if lid not in existing_level_ids]
 
-        # Re-fetch all levels to get their DB IDs
+        if not new_ids and run_config:
+            # Check if run has all the levels — maybe levels exist but aren't in the run
+            run_level_ids = {rl.get("level_id") for rl in run_config.get("levels", [])}
+            missing_from_run = [lid for lid in ordered_split_ids if lid not in run_level_ids]
+            if not missing_from_run:
+                return None  # Everything is up to date
+
+        # Create any missing game_levels
+        new_count = 0
+        for lid in new_ids:
+            auto_name = f"{abbrev}_{lid}"
+            create_level(game_name, level_name=auto_name, level_id=lid)
+            new_count += 1
+
+        # Re-fetch all levels to get DB IDs
         all_levels = get_levels_for_game(game_name)
-        level_id_to_db_id = {gl["level_id"]: gl["id"] for gl in all_levels if gl.get("level_id")}
+        lid_to_db_id = {gl["level_id"]: gl["id"] for gl in all_levels if gl.get("level_id")}
 
-        # Create a default run definition with all levels in split order
-        run = create_run(game_name, run_name="100%", is_default=True)
-        run_levels = []
-        for i, lid in enumerate(ordered_level_ids):
-            db_id = level_id_to_db_id.get(lid)
-            if db_id:
-                run_levels.append({
-                    "game_level_id": db_id,
-                    "exit_type": "normal",
-                    "sort_order": i,
-                })
+        if not run_config:
+            # No run exists — create one with all discovered levels
+            run = create_run(game_name, run_name="100%", is_default=True)
+            run_entries = []
+            for i, lid in enumerate(ordered_split_ids):
+                db_id = lid_to_db_id.get(lid)
+                if db_id:
+                    run_entries.append({"game_level_id": db_id, "exit_type": "normal", "sort_order": i})
+            if run_entries:
+                set_run_levels(run["id"], run_entries)
+            log.info("Auto-capture: created run '%s' for %s with %d levels",
+                     run["run_name"], game_name, len(run_entries))
+        else:
+            # Run exists — append any new levels to the end
+            run_id = run_config["id"]
+            existing_run_levels = get_run_levels(run_id)
+            run_level_ids = {rl.get("level_id") for rl in existing_run_levels}
+            max_sort = max((rl.get("sort_order", 0) for rl in existing_run_levels), default=-1)
 
-        if run_levels:
-            set_run_levels(run["id"], run_levels)
+            new_entries = []
+            for lid in ordered_split_ids:
+                if lid not in run_level_ids:
+                    db_id = lid_to_db_id.get(lid)
+                    if db_id:
+                        max_sort += 1
+                        new_entries.append({"game_level_id": db_id, "exit_type": "normal", "sort_order": max_sort})
 
-        _auto_capture_done.add(game_name)
-        log.info("Auto-captured %d levels for %s (run: %s, %d new levels)",
-                 len(ordered_level_ids), game_name, run["run_name"], new_levels_created)
+            if new_entries:
+                # Rebuild full level list: existing + new
+                from core import db as _db
+                for entry in new_entries:
+                    _db.execute(
+                        """INSERT INTO run_levels (run_definition_id, game_level_id, exit_type, sort_order)
+                        VALUES (?, ?, ?, ?)""",
+                        (run_id, entry["game_level_id"], entry["exit_type"], entry["sort_order"]),
+                    )
+                _db.commit()
+                log.info("Auto-capture: added %d new levels to run for %s (total: %d)",
+                         len(new_entries), game_name, len(existing_run_levels) + len(new_entries))
 
-        # Return the fresh config
+        # Invalidate enrichment cache so next call picks up the changes
+        cache_key_prefix = f"{game_name}:"
+        keys_to_remove = [k for k in _enrich_cache if k.startswith(cache_key_prefix)]
+        for k in keys_to_remove:
+            _enrich_cache.pop(k, None)
+            _enrich_cache_split_count.pop(k, None)
+
         return get_default_run_config(game_name)
 
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("Auto-capture failed for %s: %s", game_name, exc)
-        _auto_capture_done.add(game_name)
         return None
 
 
@@ -227,11 +264,15 @@ def _enrich_payload_from_cloud(payload: dict, game_name: str, user_id: int | Non
     from core.run_service import get_default_run_config
     run_config = get_default_run_config(game_name)
 
-    # Auto-capture: if no run definition exists and we have splits,
-    # auto-create game_levels and a default run from the incoming split data.
-    # The user can then edit level names and exit types on the Setup page.
-    if not run_config and splits:
-        run_config = _auto_capture_from_splits(game_name, splits)
+    # Auto-capture: progressively add new levels as they're discovered
+    # Only checks DB when split count changes (not every 0.5s push)
+    if splits:
+        last_ac_count = _auto_capture_split_count.get(game_name, -1)
+        if len(splits) != last_ac_count:
+            _auto_capture_split_count[game_name] = len(splits)
+            updated_config = _auto_capture_levels(game_name, splits)
+            if updated_config:
+                run_config = updated_config
 
     enrichment = {}
 
