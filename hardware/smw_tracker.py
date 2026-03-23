@@ -421,12 +421,18 @@ class SMWTracker:
             return True, exit_type
 
         # Method 4: Level ID changed after meaningful progress
+        # Only trigger if the level ID changed while game mode stays in normal gameplay
+        # (door transitions briefly change game mode, so this avoids false exits in fortress hacks)
         level_changed = (state.level_id is not None and self.last_state.level_id is not None
                          and state.level_id != self.last_state.level_id)
-        progressed_enough = self.active_level_best_x is not None and self.active_level_best_x >= 0x80
+        progressed_enough = self.active_level_best_x is not None and self.active_level_best_x >= 0x100
         new_level_valid = self._is_playable_level_id(state.level_id)
+        # Game mode should be in a normal gameplay mode (not transitioning)
+        game_mode_stable = (state.game_mode is not None
+                            and state.game_mode in GAMEPLAY_MODES
+                            and self.last_state.game_mode in GAMEPLAY_MODES)
 
-        if level_changed and progressed_enough and new_level_valid:
+        if level_changed and progressed_enough and new_level_valid and game_mode_stable:
             exit_type = "secret" if self.keyhole_latched else "normal"
             return True, exit_type
 
@@ -566,6 +572,13 @@ class SMWTracker:
         if not self._is_playable_level_id(state.level_id):
             return False
 
+        # Death cooldown: SMW death sequence takes ~3-4 seconds
+        # (death anim → iris out → respawn). Use 3s cooldown to prevent
+        # multiple signals from the same death being counted separately.
+        DEATH_COOLDOWN = 3.0
+        if (now - self.last_death_time) < DEATH_COOLDOWN:
+            return False
+
         # Method 1: Lives counter decreased
         lives_dropped = (state.lives is not None and self.last_state.lives is not None
                          and state.lives < self.last_state.lives)
@@ -575,16 +588,13 @@ class SMWTracker:
                               and self.last_state.player_anim_state != 0x09)
 
         # Method 3: Game mode transition to death sequence (0x12)
-        # This catches deaths in kaizo hacks with 0 lives where the life counter
-        # doesn't change and the animation state might be non-standard.
-        # 0x12 is the "iris out / circle wipe" death transition in SMW.
+        # Catches deaths in kaizo hacks with 0 lives.
         game_mode_death = (state.game_mode == 0x12
                            and self.last_state.game_mode is not None
                            and self.last_state.game_mode != 0x12
                            and self.last_state.game_mode in GAMEPLAY_MODES)
 
-        return ((lives_dropped or entered_death_anim or game_mode_death)
-                and (now - self.last_death_time) >= self.config.death_cooldown_seconds)
+        return lives_dropped or entered_death_anim or game_mode_death
 
     # ── Main loop ──
 
