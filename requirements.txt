@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-jinja2
+jinja2<3.2
 requests
 pydantic
 websocket-client
