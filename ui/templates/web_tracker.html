@@ -39,7 +39,7 @@
         <a href="/u/{{ auth_user.username }}">Home</a>
         <a href="/games">Games</a>
         <a href="/leaderboards">Leaderboards</a>
-        <a href="/download">Download</a>
+        <a href="/about">Download</a>
         <a href="/tracker" class="active">Web Tracker</a>
         <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
       </nav>
@@ -48,7 +48,7 @@
     <main style="max-width:720px;margin:0 auto;">
       <section class="card">
         <h2 style="color:var(--accent);margin-bottom:4px;">Web Tracker</h2>
-        <p class="muted" style="margin-bottom:16px;">Browser-based tracker — connects to your local QUsb2Snes. No Python install needed.</p>
+        <p class="muted" style="margin-bottom:16px;">Browser-based tracker — connects to your local QUsb2Snes and pushes to the cloud.</p>
 
         <!-- Connection Status -->
         <div class="wt-status">
@@ -325,12 +325,15 @@
     }
   }
 
-  function stopTracker() {
+  async function stopTracker() {
     running = false;
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
-    // Push inactive to clear live session on server
-    if (isActive) { isActive = false; pushInactive(); }
+    // Push inactive to clear live session on server — do this BEFORE closing WS
+    if (isActive || gameName) {
+      isActive = false;
+      await pushInactive();
+    }
     if (ws) { try { ws.close(); } catch {} ws = null; }
     document.getElementById("btn-connect").disabled = false;
     document.getElementById("btn-disconnect").disabled = true;
@@ -380,7 +383,7 @@
       } catch {}
     }
 
-    if (!gameName || isMenuROM(romPath)) {
+    if (!gameName || isMenuROM(romPath) || isMenuROM(gameName)) {
       if (isActive) {
         isActive = false;
         trackerState = "idle";
@@ -650,7 +653,8 @@
     let name = path.split("/").pop().split("\\").pop();
     name = name.replace(/\.(sfc|smc|bin|rom)$/i, "");
     name = name.replace(/[_]/g, " ").replace(/\s+/g, " ").trim();
-    return name || null;
+    if (!name || isMenuROM(name)) return null;
+    return name;
   }
 
   async function pushInactive() {

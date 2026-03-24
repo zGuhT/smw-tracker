@@ -54,7 +54,7 @@
         <a href="/">Home</a>
         <a href="/games">Games</a>
         <a href="/leaderboards">Leaderboards</a>
-        <a href="/download">About</a>
+        <a href="/about">About</a>
         {% if auth_user %}<a href="/tracker">Web Tracker</a>{% endif %}
         <a href="/auth/page" class="active">Sign Up / Log In</a>
       </nav>
@@ -120,14 +120,10 @@
           <div style="margin-top:1rem;text-align:center;">
             <button class="link-btn" onclick="showTab('forgot')">Forgot password? Get a login link</button>
           </div>
-          <!-- API key shown after successful login -->
-          <div class="api-key-box" id="login-key-box">
-            <div style="color:#7a8ba0;font-size:0.8rem;margin-bottom:0.3rem;">Your API Key:</div>
-            <code id="login-api-key"></code>
-            <button onclick="navigator.clipboard.writeText(document.getElementById('login-api-key').textContent).then(()=>this.textContent='Copied!')"
-                    style="position:absolute;top:0.5rem;right:0.5rem;background:#2a3544;color:#e2e8f0;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.8rem;">
-              Copy
-            </button>
+          <!-- Success redirect after login -->
+          <div class="api-key-box" id="login-key-box" style="text-align:center;">
+            <div style="color:#4ade80;font-size:0.95rem;margin-bottom:0.5rem;">✓ Logged in!</div>
+            <a href="/tracker" style="color:#6dd5fa;">Open Web Tracker →</a>
           </div>
         </div>
 
@@ -262,11 +258,11 @@
           showMsg("msg-login",
             `Logged in as <strong>${data.user.display_name || data.user.username}</strong>! ` +
             `<a href="/u/${data.user.username}" style="color:#6dd5fa;">Go to your profile →</a>`, true);
-          // Show API key
-          if (data.api_key) {
-            $("login-api-key").textContent = data.api_key;
-            $("login-key-box").style.display = "block";
-          }
+          // Show success box with tracker link
+          $("login-key-box").style.display = "block";
+          // Redirect to tracker or next page after short delay
+          const next = new URLSearchParams(window.location.search).get("next");
+          if (next) setTimeout(() => window.location.href = next, 1000);
         } else {
           showMsg("msg-login", data.error || "Login failed.", false);
         }

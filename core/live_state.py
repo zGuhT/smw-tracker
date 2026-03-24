@@ -42,8 +42,21 @@ class LiveStateManager:
 
     # ── Backward-compatible single-user API ──
 
+    _MENU_NAMES = {"m3nu", "menu", "m3nu.bin", "menu.bin"}
+
+    @staticmethod
+    def _is_menu_game(game_name: str | None) -> bool:
+        if not game_name:
+            return False
+        lower = game_name.lower()
+        return lower in LiveStateManager._MENU_NAMES or "menu" in lower or "m3nu" in lower
+
     def update(self, payload: dict[str, Any], user_id: str = DEFAULT_USER) -> None:
         """Update the current live state and notify all SSE subscribers."""
+        # Filter out menu ROMs — don't store them as live state
+        if self._is_menu_game(payload.get("game_name")):
+            payload = dict(payload, is_active=False)
+
         us = self._get_user(user_id)
         us.state = payload
         us.updated_at = time.time()
@@ -92,6 +105,8 @@ class LiveStateManager:
         now = time.time()
         for uid, us in self._users.items():
             if us.state and us.state.get("is_active"):
+                if self._is_menu_game(us.state.get("game_name")):
+                    continue
                 result.append({
                     "user_id": uid,
                     "game_name": us.state.get("game_name"),

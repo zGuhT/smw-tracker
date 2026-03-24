@@ -34,10 +34,16 @@ def home(request: Request):
     return templates.TemplateResponse("landing.html", _ctx(request))
 
 
+@router.get("/about", response_class=HTMLResponse)
+def about_page(request: Request):
+    """About page — what SMW Tracker is, how to get started."""
+    return templates.TemplateResponse("download.html", _ctx(request))
+
+
 @router.get("/download", response_class=HTMLResponse)
 def download_page(request: Request):
-    """Download/install instructions page (placeholder)."""
-    return templates.TemplateResponse("download.html", _ctx(request))
+    """Legacy URL — redirect to /about."""
+    return RedirectResponse("/about", status_code=302)
 
 
 @router.get("/games", response_class=HTMLResponse)
