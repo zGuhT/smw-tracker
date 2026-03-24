@@ -580,13 +580,18 @@ class SMWTracker:
         lives_dropped = (state.lives is not None and self.last_state.lives is not None
                          and state.lives < self.last_state.lives)
 
-        # Method 2: Player animation trigger changed to death (0x09)
-        # $7E:0071 — the authoritative death signal from SMWCentral RAM map.
-        # Also check for 0x01 (dying bounce off screen — pit deaths, lava, etc).
+        # Method 2: Player animation trigger changed to death (0x09) or dying bounce (0x01)
         entered_death_anim = (state.player_anim_state in (ANIM_DEATH, ANIM_DYING_BOUNCE)
                               and self.last_state.player_anim_state not in (ANIM_DEATH, ANIM_DYING_BOUNCE))
 
-        return lives_dropped or entered_death_anim
+        # Method 3: Game mode dropped from 0x14 (gameplay) to 0x0F (level reload)
+        # without a recent exit — this means death, not door/pipe transition.
+        # Critical for kaizo hacks where anim state 0x09 may be too brief to catch.
+        game_mode_death = (state.game_mode == 0x0F
+                           and self.last_state.game_mode == 0x14
+                           and (now - self.last_exit_time) > 4.0)
+
+        return lives_dropped or entered_death_anim or game_mode_death
 
     # ── Main loop ──
 

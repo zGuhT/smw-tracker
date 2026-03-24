@@ -496,20 +496,46 @@
     }
 
     // ── Death detection ──
-    if (validLevel && lastState && (now - lastDeathTime) >= 3.0) {
-      const livesDropped = state.lives !== undefined && lastState.lives !== undefined && state.lives < lastState.lives;
-      const deathAnim = (state.playerAnim === ANIM_DEATH || state.playerAnim === ANIM_DYING_BOUNCE)
-          && lastState.playerAnim !== ANIM_DEATH && lastState.playerAnim !== ANIM_DYING_BOUNCE;
+    // Multiple methods to catch deaths at 250ms polling rate:
+    // 1. Anim state transitions to death (0x09) or dying bounce (0x01)
+    // 2. Game mode drops from 0x14 (gameplay) to 0x0F-0x12 (level reload)
+    //    WITHOUT an exit being detected — this means death, not door/pipe
+    // 3. Lives counter decreases (unreliable in kaizo with 0 lives)
+    if (lastState && (now - lastDeathTime) >= 3.0) {
+      let isDeath = false;
 
-      if (livesDropped || deathAnim) {
+      // Method 1: Animation state death signals
+      const deathAnims = new Set([ANIM_DEATH, ANIM_DYING_BOUNCE]);
+      if (deathAnims.has(state.playerAnim) && !deathAnims.has(lastState.playerAnim)) {
+        isDeath = true;
+      }
+
+      // Method 2: Game mode drops from gameplay (0x14) to level reload (0x0F)
+      // Only count as death if no exit was detected recently (exits also cause 0x14→0x0F)
+      if (!isDeath && lastState.gameMode === 0x14 && state.gameMode === 0x0F
+          && (now - lastExitTime) > 4.0) {
+        isDeath = true;
+      }
+
+      // Method 3: Lives counter (backup, works in standard SMW)
+      if (!isDeath && state.lives !== undefined && lastState.lives !== undefined
+          && state.lives < lastState.lives) {
+        isDeath = true;
+      }
+
+      if (isDeath && validLevel) {
         activeLevelDeaths++;
         deathsThisSession++;
         deathEvents.push({
-          level_id: state.levelId, level_name: state.levelId,
-          x_position: state.playerX, event_time: new Date().toISOString(),
+          level_id: currentLevelId || state.levelId,
+          level_name: currentLevelId || state.levelId,
+          x_position: activeLevelBestX || state.playerX,
+          event_time: new Date().toISOString(),
         });
         lastDeathTime = now;
-        wtLog(`Death #${deathsThisSession} at ${state.levelId} x=${state.playerX}`, "warn");
+        wtLog(`Death #${deathsThisSession} at ${currentLevelId || state.levelId} x=${activeLevelBestX || state.playerX}`, "warn");
+        // Reset best X for next attempt (player respawns at start of level)
+        activeLevelBestX = null;
       }
     }
   }
