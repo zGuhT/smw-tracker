@@ -70,17 +70,34 @@
       <section class="card" id="game-state-card" style="display:none;">
         <div class="wt-game" id="wt-game">—</div>
         <div class="wt-level" id="wt-level">—</div>
+
+        <!-- Core RAM Values -->
+        <div style="margin:10px 0 4px;font-size:0.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;">Memory</div>
+        <div class="wt-stats">
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-mode">—</div><div class="wt-stat-label">$0100 Mode</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-anim">—</div><div class="wt-stat-label">$0071 Anim</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-lives">—</div><div class="wt-stat-label">$0DBE Lives</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-xpos">—</div><div class="wt-stat-label">$0094 X Pos</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-yspd">—</div><div class="wt-stat-label">$007D Y Spd</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-exit">—</div><div class="wt-stat-label">$1493 Exit</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-keyhole">—</div><div class="wt-stat-label">$1434 Keyhole</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-powerup">—</div><div class="wt-stat-label">$0019 Powerup</div></div>
+        </div>
+
+        <!-- Tracker State -->
+        <div style="margin:10px 0 4px;font-size:0.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;">Tracker</div>
         <div class="wt-stats">
           <div class="wt-stat"><div class="wt-stat-val" id="wt-splits">0</div><div class="wt-stat-label">Splits</div></div>
           <div class="wt-stat"><div class="wt-stat-val deaths-color" id="wt-deaths">0</div><div class="wt-stat-label">Deaths</div></div>
-          <div class="wt-stat"><div class="wt-stat-val" id="wt-mode">—</div><div class="wt-stat-label">Game Mode</div></div>
-          <div class="wt-stat"><div class="wt-stat-val" id="wt-anim">—</div><div class="wt-stat-label">Anim State</div></div>
-          <div class="wt-stat"><div class="wt-stat-val" id="wt-lives">—</div><div class="wt-stat-label">Lives</div></div>
-          <div class="wt-stat"><div class="wt-stat-val" id="wt-xpos">—</div><div class="wt-stat-label">X Pos</div></div>
-          <div class="wt-stat"><div class="wt-stat-val" id="wt-exit">—</div><div class="wt-stat-label">Exit State</div></div>
-          <div class="wt-stat"><div class="wt-stat-val" id="wt-state">idle</div><div class="wt-stat-label">Tracker</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-bestx">—</div><div class="wt-stat-label">Best X</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-lvldeaths">0</div><div class="wt-stat-label">Lvl Deaths</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-state">idle</div><div class="wt-stat-label">State</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-deathtimer">—</div><div class="wt-stat-label">Death CD</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-exittimer">—</div><div class="wt-stat-label">Exit CD</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-lastdeath">—</div><div class="wt-stat-label">Last Death</div></div>
         </div>
-        <div style="text-align:center;margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+
+        <div style="text-align:center;margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <a id="wt-live-link" href="/live?user={{ user_id }}" target="_blank" class="wt-btn" style="text-decoration:none;">Open Live Page →</a>
           <button class="wt-btn danger" onclick="resetRun()">Reset Run</button>
         </div>
@@ -123,6 +140,12 @@
     EXIT_STATE:  0xF51493,  // End level timer
     KEYHOLE:     0xF51434,  // Keyhole timer
     GAME_MODE:   0xF50100,  // Game mode
+    // Extended
+    Y_SPEED:     0xF5007D,  // Player Y speed
+    POWERUP:     0xF50019,  // Powerup status
+    LOCK_ANIM:   0xF5009D,  // Lock animation flag
+    IN_WATER:    0xF50075,  // In water flag
+    ON_YOSHI:    0xF5187A,  // On Yoshi flag
   };
   // Read all core fields in one batch (contiguous isn't possible, so we read individually)
 
@@ -219,8 +242,7 @@
   }
 
   async function readBatch() {
-    // Read all core fields - each read is a separate request/response
-    // Must be sequential since QUsb2Snes uses a single WebSocket
+    // Read all fields - each is a separate request/response (QUsb2Snes protocol)
     const levelId = await readU8(ADDR.LEVEL_ID);
     const playerX = await readU16LE(ADDR.PLAYER_X);
     const playerAnim = await readU8(ADDR.PLAYER_ANIM);
@@ -228,7 +250,9 @@
     const keyhole = await readU8(ADDR.KEYHOLE);
     const lives = await readU8(ADDR.LIVES);
     const gameMode = await readU8(ADDR.GAME_MODE);
-    return { levelId, playerX, playerAnim, exitState, keyhole, lives, gameMode };
+    const ySpeed = await readU8(ADDR.Y_SPEED);
+    const powerup = await readU8(ADDR.POWERUP);
+    return { levelId, playerX, playerAnim, exitState, keyhole, lives, gameMode, ySpeed, powerup };
   }
 
   async function getInfo() {
@@ -374,6 +398,8 @@
       keyhole: raw.keyhole,
       lives: raw.lives,
       gameMode: raw.gameMode,
+      ySpeed: raw.ySpeed,
+      powerup: raw.powerup,
     };
 
     // Update tracker state machine
@@ -524,6 +550,8 @@
       }
 
       if (isDeath && validLevel) {
+        const reason = deathAnims.has(state.playerAnim) ? "anim" :
+            (lastState.gameMode === 0x14 && state.gameMode === 0x0F) ? "mode" : "lives";
         activeLevelDeaths++;
         deathsThisSession++;
         deathEvents.push({
@@ -533,7 +561,8 @@
           event_time: new Date().toISOString(),
         });
         lastDeathTime = now;
-        wtLog(`Death #${deathsThisSession} at ${currentLevelId || state.levelId} x=${activeLevelBestX || state.playerX}`, "warn");
+        lastDeathReason = `${reason} x=${activeLevelBestX || state.playerX}`;
+        wtLog(`Death #${deathsThisSession} [${reason}] at ${currentLevelId || state.levelId} x=${activeLevelBestX || state.playerX}`, "warn");
         // Reset best X for next attempt (player respawns at start of level)
         activeLevelBestX = null;
       }
@@ -626,17 +655,76 @@
     document.getElementById(id).textContent = text;
   }
 
+  const POWERUP_NAMES = { 0: "Small", 1: "Big", 2: "Cape", 3: "Fire" };
+  const ANIM_NAMES = {
+    0x00: "Idle", 0x01: "Dying↑", 0x02: "Mushroom", 0x03: "Cape/Fire",
+    0x04: "Fireball", 0x05: "Spring", 0x06: "Pipe", 0x07: "Star",
+    0x08: "Shrink", 0x09: "Death", 0x0A: "Castle", 0x0B: "Goal", 0x0D: "Balloon",
+  };
+  const MODE_NAMES = {
+    0x00: "Load NP", 0x07: "Title", 0x08: "FileSel", 0x0B: "Fade→OW",
+    0x0C: "Load OW", 0x0D: "OW Fade", 0x0E: "Overworld",
+    0x0F: "Fade→Lvl", 0x10: "Fade Blk", 0x11: "Load Lvl", 0x12: "Prep Lvl",
+    0x13: "Lvl Fade", 0x14: "Gameplay", 0x15: "Fade→GO", 0x17: "GameOver",
+  };
+  let lastDeathReason = "—";
+
+  function hex(v) { return v !== undefined && v !== null ? "0x" + v.toString(16).toUpperCase().padStart(2, "0") : "—"; }
+
   function updateUI(state) {
+    const now = Date.now() / 1000;
     document.getElementById("wt-game").textContent = gameName || "—";
-    document.getElementById("wt-level").textContent = state ? `Level: ${state.levelId} (0x${state.levelId})` : "—";
+    document.getElementById("wt-level").textContent = state ? `Level: ${state.levelId}` : "—";
+
+    // Memory values
+    if (state) {
+      const modeHex = hex(state.gameMode);
+      const modeName = MODE_NAMES[state.gameMode] || "";
+      document.getElementById("wt-mode").textContent = `${modeHex}`;
+      document.getElementById("wt-mode").title = modeName;
+
+      const animHex = hex(state.playerAnim);
+      const animName = ANIM_NAMES[state.playerAnim] || "";
+      document.getElementById("wt-anim").textContent = `${animHex}`;
+      document.getElementById("wt-anim").title = animName;
+      // Color anim state for death values
+      const animEl = document.getElementById("wt-anim");
+      if (state.playerAnim === 0x09 || state.playerAnim === 0x01) animEl.style.color = "var(--danger)";
+      else if (state.playerAnim === 0x0B) animEl.style.color = "var(--success)";
+      else if (state.playerAnim === 0x06) animEl.style.color = "var(--gold)";
+      else animEl.style.color = "";
+
+      document.getElementById("wt-lives").textContent = state.lives;
+      document.getElementById("wt-xpos").textContent = state.playerX;
+
+      // Y speed: show signed value (0x80+ = rising, 0x00-0x7F = falling)
+      const ySpd = state.ySpeed > 127 ? state.ySpeed - 256 : state.ySpeed;
+      document.getElementById("wt-yspd").textContent = ySpd;
+      const yEl = document.getElementById("wt-yspd");
+      yEl.style.color = ySpd < 0 ? "var(--success)" : ySpd > 10 ? "var(--danger)" : "";
+
+      document.getElementById("wt-exit").textContent = state.exitState || "0";
+      document.getElementById("wt-keyhole").textContent = state.keyhole || "0";
+      document.getElementById("wt-powerup").textContent = POWERUP_NAMES[state.powerup] || hex(state.powerup);
+    }
+
+    // Tracker state
     document.getElementById("wt-splits").textContent = sessionSplits.length;
     document.getElementById("wt-deaths").textContent = deathsThisSession;
-    document.getElementById("wt-mode").textContent = state ? `0x${state.gameMode.toString(16).toUpperCase().padStart(2,"0")}` : "—";
-    document.getElementById("wt-anim").textContent = state ? `0x${state.playerAnim.toString(16).toUpperCase().padStart(2,"0")}` : "—";
-    document.getElementById("wt-lives").textContent = state ? state.lives : "—";
-    document.getElementById("wt-xpos").textContent = state ? state.playerX : "—";
-    document.getElementById("wt-exit").textContent = state ? state.exitState : "—";
+    document.getElementById("wt-bestx").textContent = activeLevelBestX || "—";
+    document.getElementById("wt-lvldeaths").textContent = activeLevelDeaths;
     document.getElementById("wt-state").textContent = trackerState;
+
+    // Cooldown timers
+    const deathCD = Math.max(0, 3.0 - (now - lastDeathTime));
+    document.getElementById("wt-deathtimer").textContent = deathCD > 0 ? deathCD.toFixed(1) + "s" : "ready";
+    document.getElementById("wt-deathtimer").style.color = deathCD > 0 ? "var(--gold)" : "var(--success)";
+
+    const exitCD = Math.max(0, 4.0 - (now - lastExitTime));
+    document.getElementById("wt-exittimer").textContent = exitCD > 0 ? exitCD.toFixed(1) + "s" : "ready";
+    document.getElementById("wt-exittimer").style.color = exitCD > 0 ? "var(--gold)" : "var(--success)";
+
+    document.getElementById("wt-lastdeath").textContent = lastDeathReason;
   }
 
   function resetRun() {
