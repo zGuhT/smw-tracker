@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Download — SMW Tracker</title>
+  <title>About — SMW Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="/static/css/app.css?v=4" rel="stylesheet">
 </head>
@@ -14,7 +14,8 @@
         <a href="/">Home</a>
         <a href="/games">Games</a>
         <a href="/leaderboards">Leaderboards</a>
-        <a href="/download" class="active">Download</a>
+        <a href="/download" class="active">About</a>
+        {% if auth_user %}<a href="/tracker">Web Tracker</a>{% endif %}
         {% if auth_user %}
           <a href="/u/{{ auth_user.username }}/account">{{ auth_user.display_name or auth_user.username }}</a>
         {% else %}
@@ -25,33 +26,30 @@
 
     <main style="max-width:720px;margin:0 auto;">
       <section class="card" style="text-align:center;padding:2rem 1.5rem;">
-        <h2 style="color:var(--accent);font-size:1.6rem;margin:0 0 0.5rem;">Get Started with SMW Tracker</h2>
+        <h2 style="color:var(--accent);font-size:1.6rem;margin:0 0 0.5rem;">About SMW Tracker</h2>
         <p class="muted" style="max-width:500px;margin:0 auto;line-height:1.6;">
-          Connect your SNES to the cloud. Track splits, deaths, and PBs automatically.
-          Share your runs live with the world.
+          Real-time SNES speedrun tracking. Connect your SNES hardware, track splits, deaths,
+          and PBs automatically, and share your runs live with the world. No software install needed.
         </p>
       </section>
 
       <section class="card">
         <div class="card-title">What You Need</div>
         <div class="dl-grid">
-          <div class="dl-req"><div class="dl-req-icon">🐍</div><div><strong>Python 3.10+</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="https://www.python.org/downloads/" style="color:var(--accent);">python.org/downloads</a> — check "Add to PATH" during install</div></div></div>
-          <div class="dl-req"><div class="dl-req-icon">🔌</div><div><strong>QUsb2Snes</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="https://skarsnik.github.io/QUsb2snes/" style="color:var(--accent);">Download QUsb2Snes</a> — bridge between your hardware and the tracker</div></div></div>
-          <div class="dl-req"><div class="dl-req-icon">🎮</div><div><strong>Compatible Hardware</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;">SD2SNES / FXPak Pro, or a supported emulator (RetroArch, Snes9x with lua)</div></div></div>
-          <div class="dl-req"><div class="dl-req-icon">👤</div><div><strong>SMW Tracker Account</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="/auth/page" style="color:var(--accent);">Sign up here</a> (free) — you'll need your API key from the Account page</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">🔌</div><div><strong>QUsb2Snes</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="https://skarsnik.github.io/QUsb2snes/" style="color:var(--accent);">Download QUsb2Snes</a> — bridge between your hardware and the browser</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">🎮</div><div><strong>Compatible Hardware</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;">SD2SNES / FXPak Pro, or a supported emulator (RetroArch, Snes9x with Emulator Network Access)</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">🌐</div><div><strong>Modern Browser</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;">Chrome, Edge, or Brave recommended (needs WebSocket to localhost support)</div></div></div>
+          <div class="dl-req"><div class="dl-req-icon">👤</div><div><strong>SMW Tracker Account</strong><div class="muted" style="font-size:0.85rem;margin-top:2px;"><a href="/auth/page" style="color:var(--accent);">Sign up here</a> (free)</div></div></div>
         </div>
       </section>
 
       <section class="card">
-        <div class="card-title">Installation</div>
+        <div class="card-title">Getting Started</div>
         <div class="dl-steps">
-          <div class="dl-step"><div class="dl-step-num">1</div><div class="dl-step-body"><strong>Clone the repository</strong><pre class="dl-code">git clone https://github.com/zGuhT/smw-tracker.git
-cd smw-tracker</pre></div></div>
-          <div class="dl-step"><div class="dl-step-num">2</div><div class="dl-step-body"><strong>Install dependencies</strong><pre class="dl-code">pip install -r requirements.txt</pre></div></div>
-          <div class="dl-step"><div class="dl-step-num">3</div><div class="dl-step-body"><strong>Start QUsb2Snes</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Launch QUsb2Snes and make sure your SD2SNES/FXPak is connected, or your emulator has the connector running.</p></div></div>
-          <div class="dl-step"><div class="dl-step-num">4</div><div class="dl-step-body"><strong>Run the tracker</strong><pre class="dl-code"><span class="dl-comment"># Find your API key at smwtracker.com → Account</span>
-python run_tracker.py --cloud --api-key YOUR_API_KEY</pre></div></div>
-          <div class="dl-step"><div class="dl-step-num">5</div><div class="dl-step-body"><strong>Set up your game</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Load your ROM. The tracker auto-detects the game. Go to <strong style="color:var(--text);">smwtracker.com → Games → [Your Game] → Setup</strong> to configure levels. Use the <strong style="color:var(--text);">Capture</strong> button on each level while you're in that level to map SNES level IDs.</p></div></div>
+          <div class="dl-step"><div class="dl-step-num">1</div><div class="dl-step-body"><strong>Install QUsb2Snes</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Download from <a href="https://skarsnik.github.io/QUsb2snes/" style="color:var(--accent);">skarsnik.github.io/QUsb2snes</a> and run it. Make sure your SD2SNES/FXPak is connected, or your emulator has the connector running.</p></div></div>
+          <div class="dl-step"><div class="dl-step-num">2</div><div class="dl-step-body"><strong>Create an account</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;"><a href="/auth/page" style="color:var(--accent);">Sign up</a> for a free account on SMW Tracker.</p></div></div>
+          <div class="dl-step"><div class="dl-step-num">3</div><div class="dl-step-body"><strong>Open the Web Tracker</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Go to <a href="/tracker" style="color:var(--accent);">smwtracker.com/tracker</a> and click <strong style="color:var(--text);">Connect</strong>. The browser connects directly to QUsb2Snes on your computer.</p></div></div>
+          <div class="dl-step"><div class="dl-step-num">4</div><div class="dl-step-body"><strong>Play!</strong><p class="muted" style="font-size:0.85rem;margin:4px 0 0;">Load a ROM on your SNES. The tracker auto-detects the game, records splits and deaths, and syncs everything to the cloud in real-time. Levels are auto-captured — go to the game's Setup page to rename them.</p></div></div>
         </div>
       </section>
 

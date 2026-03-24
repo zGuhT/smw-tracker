@@ -329,6 +329,8 @@
     running = false;
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
+    // Push inactive to clear live session on server
+    if (isActive) { isActive = false; pushInactive(); }
     if (ws) { try { ws.close(); } catch {} ws = null; }
     document.getElementById("btn-connect").disabled = false;
     document.getElementById("btn-disconnect").disabled = true;
@@ -378,10 +380,13 @@
       } catch {}
     }
 
-    if (!gameName || romPath === "/sd2snes/menu.bin" || romPath === "menu.bin") {
+    if (!gameName || isMenuROM(romPath)) {
       if (isActive) {
         isActive = false;
         trackerState = "idle";
+        runStarted = false;
+        // Push inactive state to clear the live session on the server
+        pushInactive();
         updateUI(null);
       }
       return;
@@ -522,11 +527,12 @@
     }
 
     // ── Death detection ──
-    // Multiple methods to catch deaths at 250ms polling rate:
+    // Methods to catch deaths at 250ms polling rate:
     // 1. Anim state transitions to death (0x09) or dying bounce (0x01)
-    // 2. Game mode drops from 0x14 (gameplay) to 0x0F-0x12 (level reload)
+    // 2. Game mode drops from 0x14 (gameplay) to 0x0F (level reload)
     //    WITHOUT an exit being detected — this means death, not door/pipe
-    // 3. Lives counter decreases (unreliable in kaizo with 0 lives)
+    // Note: Lives counter is NOT used — unreliable in kaizo hacks with 0 lives
+    //       and causes false positives on game start/level transitions.
     if (lastState && (now - lastDeathTime) >= 3.0) {
       let isDeath = false;
 
@@ -543,15 +549,8 @@
         isDeath = true;
       }
 
-      // Method 3: Lives counter (backup, works in standard SMW)
-      if (!isDeath && state.lives !== undefined && lastState.lives !== undefined
-          && state.lives < lastState.lives) {
-        isDeath = true;
-      }
-
       if (isDeath && validLevel) {
-        const reason = deathAnims.has(state.playerAnim) ? "anim" :
-            (lastState.gameMode === 0x14 && state.gameMode === 0x0F) ? "mode" : "lives";
+        const reason = deathAnims.has(state.playerAnim) ? "anim" : "mode";
         activeLevelDeaths++;
         deathsThisSession++;
         deathEvents.push({
@@ -631,6 +630,14 @@
   }
 
   // ── Helpers ──
+  function isMenuROM(path) {
+    if (!path) return true;
+    const lower = path.toLowerCase();
+    return lower.includes("menu.bin") || lower.includes("m3nu.bin")
+        || lower.includes("m3nu") || lower.endsWith("/menu")
+        || lower === "menu" || lower === "m3nu";
+  }
+
   function isPlayableLevel(levelId) {
     if (!levelId) return false;
     const n = parseInt(levelId, 16);
@@ -639,10 +646,30 @@
 
   function deriveGameName(path) {
     if (!path) return null;
+    if (isMenuROM(path)) return null;
     let name = path.split("/").pop().split("\\").pop();
     name = name.replace(/\.(sfc|smc|bin|rom)$/i, "");
     name = name.replace(/[_]/g, " ").replace(/\s+/g, " ").trim();
     return name || null;
+  }
+
+  async function pushInactive() {
+    // Push an inactive state to clear the live session on the server
+    try {
+      await fetch(PUSH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          id: null, game_name: gameName || "", platform: "SNES",
+          start_time: startTime, is_active: false,
+          current_level_id: null, current_level_name: null,
+          current_x_position: null, deaths_this_session: 0,
+          splits: [], run_levels: [], run_started: false, run_complete: false,
+          server_time: Date.now() / 1000,
+        }),
+      });
+    } catch {}
   }
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

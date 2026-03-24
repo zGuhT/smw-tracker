@@ -25,7 +25,8 @@
         <a href="/">Home</a>
         <a href="/games">Games</a>
         <a href="/leaderboards">Leaderboards</a>
-        <a href="/download">Download</a>
+        <a href="/download">About</a>
+        {% if auth_user %}<a href="/tracker">Web Tracker</a>{% endif %}
         {% if auth_user %}
           <a href="/u/{{ auth_user.username }}">{{ auth_user.display_name or auth_user.username }}</a>
         {% else %}
