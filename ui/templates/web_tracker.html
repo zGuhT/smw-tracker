@@ -74,10 +74,15 @@
           <div class="wt-stat"><div class="wt-stat-val" id="wt-splits">0</div><div class="wt-stat-label">Splits</div></div>
           <div class="wt-stat"><div class="wt-stat-val deaths-color" id="wt-deaths">0</div><div class="wt-stat-label">Deaths</div></div>
           <div class="wt-stat"><div class="wt-stat-val" id="wt-mode">—</div><div class="wt-stat-label">Game Mode</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-anim">—</div><div class="wt-stat-label">Anim State</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-lives">—</div><div class="wt-stat-label">Lives</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-xpos">—</div><div class="wt-stat-label">X Pos</div></div>
+          <div class="wt-stat"><div class="wt-stat-val" id="wt-exit">—</div><div class="wt-stat-label">Exit State</div></div>
           <div class="wt-stat"><div class="wt-stat-val" id="wt-state">idle</div><div class="wt-stat-label">Tracker</div></div>
         </div>
-        <div style="text-align:center;margin-top:8px;">
-          <a id="wt-live-link" href="/live?user={{ user_id }}" target="_blank" class="wt-btn" style="text-decoration:none;display:inline-block;">Open Live Page →</a>
+        <div style="text-align:center;margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <a id="wt-live-link" href="/live?user={{ user_id }}" target="_blank" class="wt-btn" style="text-decoration:none;">Open Live Page →</a>
+          <button class="wt-btn danger" onclick="resetRun()">Reset Run</button>
         </div>
       </section>
 
@@ -170,6 +175,8 @@
   }
 
   // ── QUsb2Snes Protocol ──
+  let readLock = false;
+
   function sendCmd(opcode, operands = []) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ Opcode: opcode, Space: "SNES", Operands: operands }));
@@ -178,9 +185,10 @@
   function waitForMessage() {
     return new Promise((resolve, reject) => {
       if (!ws) return reject("No WebSocket");
-      const timeout = setTimeout(() => reject("Timeout"), 3000);
+      const timeout = setTimeout(() => { ws.onmessage = null; reject("Timeout"); }, 3000);
       ws.onmessage = (e) => {
         clearTimeout(timeout);
+        ws.onmessage = null;
         resolve(e.data);
       };
     });
@@ -208,6 +216,19 @@
     sendCmd("GetAddress", [addr.toString(16).toUpperCase(), "2"]);
     const buf = await qusbRecvBinary(2);
     return buf[0] | (buf[1] << 8);
+  }
+
+  async function readBatch() {
+    // Read all core fields - each read is a separate request/response
+    // Must be sequential since QUsb2Snes uses a single WebSocket
+    const levelId = await readU8(ADDR.LEVEL_ID);
+    const playerX = await readU16LE(ADDR.PLAYER_X);
+    const playerAnim = await readU8(ADDR.PLAYER_ANIM);
+    const exitState = await readU8(ADDR.EXIT_STATE);
+    const keyhole = await readU8(ADDR.KEYHOLE);
+    const lives = await readU8(ADDR.LIVES);
+    const gameMode = await readU8(ADDR.GAME_MODE);
+    return { levelId, playerX, playerAnim, exitState, keyhole, lives, gameMode };
   }
 
   async function getInfo() {
@@ -310,11 +331,15 @@
     if (running) pollTimer = setTimeout(pollLoop, POLL_MS);
   }
 
+  let romCheckCounter = 0;
+
   async function processOnce() {
     const now = Date.now() / 1000;
 
-    // Read ROM info periodically
-    if (!romPath || Math.random() < 0.02) {
+    // Read ROM info every ~2 seconds (not every poll)
+    romCheckCounter++;
+    if (!romPath || romCheckCounter >= 8) {
+      romCheckCounter = 0;
       try {
         const info = await getInfo();
         const results = info.Results || [];
@@ -338,28 +363,29 @@
       return;
     }
 
-    // Read core memory
-    const levelId = await readU8(ADDR.LEVEL_ID);
-    const playerX = await readU16LE(ADDR.PLAYER_X);
-    const playerAnim = await readU8(ADDR.PLAYER_ANIM);
-    const exitState = await readU8(ADDR.EXIT_STATE);
-    const keyhole = await readU8(ADDR.KEYHOLE);
-    const lives = await readU8(ADDR.LIVES);
-    const gameMode = await readU8(ADDR.GAME_MODE);
-
-    const levelIdHex = levelId.toString(16).toUpperCase().padStart(2, "0");
-    const state = { levelId: levelIdHex, playerX, playerAnim, exitState, keyhole, lives, gameMode };
+    // Batch read all core memory
+    const raw = await readBatch();
+    const levelIdHex = raw.levelId.toString(16).toUpperCase().padStart(2, "0");
+    const state = {
+      levelId: levelIdHex,
+      playerX: raw.playerX,
+      playerAnim: raw.playerAnim,
+      exitState: raw.exitState,
+      keyhole: raw.keyhole,
+      lives: raw.lives,
+      gameMode: raw.gameMode,
+    };
 
     // Update tracker state machine
     updateStateMachine(state, now);
 
     // Update UI
     currentLevelId = levelIdHex;
-    currentX = playerX;
+    currentX = raw.playerX;
     updateUI(state);
 
     lastState = state;
-    lastGameMode = gameMode;
+    lastGameMode = raw.gameMode;
   }
 
   // ── State Machine ──
@@ -373,6 +399,8 @@
       runStarted = true;
       sawMenu = false;
       splitStartTime = now;
+      runStartEpoch = now;
+      currentSplitStart = now;
       startTime = new Date().toISOString();
       isActive = true;
       sessionSplits = [];
@@ -381,6 +409,7 @@
       activeLevelDeaths = 0;
       activeLevelBestX = null;
       exitedLevelId = null;
+      runComplete = false;
       wtLog(`Run auto-started (mode ${lastGameMode.toString(16)}→${state.gameMode.toString(16)})`, "info");
     }
 
@@ -486,9 +515,23 @@
   }
 
   // ── Cloud Push ──
+  let runStartEpoch = null;
+  let currentSplitStart = null;
+  let runDelayMs = 0;
+  let runComplete = false;
+  let lastPushHash = null;
+
   async function pushToCloud() {
     if (!isActive || !gameName) return;
     try {
+      // Calculate current_split_start from last split's exited_at
+      let css = currentSplitStart;
+      if (sessionSplits.length > 0) {
+        css = sessionSplits[sessionSplits.length - 1].exited_at;
+      } else if (runStartEpoch) {
+        css = runStartEpoch;
+      }
+
       const payload = {
         id: null, game_name: gameName, platform: "SNES",
         start_time: startTime, is_active: true,
@@ -502,23 +545,33 @@
         pb_splits: [], pb_total_ms: null, sum_of_best_ms: null,
         best_segments: {},
         run_started: runStarted,
-        run_complete: false,
+        run_complete: runComplete,
+        // Timer fields — critical for live page
+        run_start_epoch: runStartEpoch,
+        current_split_start: css,
+        run_delay_ms: runDelayMs,
+        is_paused: false,
+        paused_at: null,
         server_time: Date.now() / 1000,
       };
+
+      // Skip push if payload hasn't meaningfully changed
+      const hash = `${sessionSplits.length}:${deathsThisSession}:${currentLevelId}:${runComplete}`;
+      const force = hash !== lastPushHash;
+      lastPushHash = hash;
 
       const res = await fetch(PUSH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",  // Send session cookie
+        credentials: "same-origin",
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 401) wtLog("Cloud push rejected: bad API key", "err");
+        if (res.status === 401) wtLog("Cloud push rejected: not authenticated", "err");
       }
     } catch (err) {
-      // Silent — cloud push failures shouldn't stop tracking
+      // Silent
     }
   }
 
@@ -549,11 +602,31 @@
 
   function updateUI(state) {
     document.getElementById("wt-game").textContent = gameName || "—";
-    document.getElementById("wt-level").textContent = state ? `Level: ${state.levelId}` : "—";
+    document.getElementById("wt-level").textContent = state ? `Level: ${state.levelId} (0x${state.levelId})` : "—";
     document.getElementById("wt-splits").textContent = sessionSplits.length;
     document.getElementById("wt-deaths").textContent = deathsThisSession;
     document.getElementById("wt-mode").textContent = state ? `0x${state.gameMode.toString(16).toUpperCase().padStart(2,"0")}` : "—";
+    document.getElementById("wt-anim").textContent = state ? `0x${state.playerAnim.toString(16).toUpperCase().padStart(2,"0")}` : "—";
+    document.getElementById("wt-lives").textContent = state ? state.lives : "—";
+    document.getElementById("wt-xpos").textContent = state ? state.playerX : "—";
+    document.getElementById("wt-exit").textContent = state ? state.exitState : "—";
     document.getElementById("wt-state").textContent = trackerState;
+  }
+
+  function resetRun() {
+    sessionSplits = [];
+    deathEvents = [];
+    deathsThisSession = 0;
+    activeLevelDeaths = 0;
+    activeLevelBestX = null;
+    splitStartTime = null;
+    runStartEpoch = null;
+    currentSplitStart = null;
+    runStarted = false;
+    runComplete = false;
+    exitedLevelId = null;
+    sawMenu = false;
+    wtLog("Run reset", "warn");
   }
   </script>
 </body>
