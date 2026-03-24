@@ -99,7 +99,8 @@
 
         <div style="text-align:center;margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <a id="wt-live-link" href="/live?user={{ user_id }}" target="_blank" class="wt-btn" style="text-decoration:none;">Open Live Page →</a>
-          <button class="wt-btn danger" onclick="resetRun()">Reset Run</button>
+          <button class="wt-btn" onclick="resetRun()">Reset Run</button>
+          <button class="wt-btn danger" onclick="resetRunAndSNES()">Reset Run + SNES</button>
         </div>
       </section>
 
@@ -624,7 +625,15 @@
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        const data = await res.json();
+        // Process any pending commands from the live page
+        if (data.commands && data.commands.length > 0) {
+          for (const cmd of data.commands) {
+            handleRemoteCommand(cmd);
+          }
+        }
+      } else {
         if (res.status === 401) wtLog("Cloud push rejected: not authenticated", "err");
       }
     } catch (err) {
@@ -772,6 +781,60 @@
     exitedLevelId = null;
     sawMenu = false;
     wtLog("Run reset", "warn");
+  }
+
+  async function resetSNES() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      wtLog("Cannot reset SNES — not connected", "err");
+      return;
+    }
+    try {
+      sendCmd("Reset");
+      wtLog("SNES soft reset sent", "info");
+      // Also reset the run
+      resetRun();
+    } catch (err) {
+      wtLog(`SNES reset failed: ${err}`, "err");
+    }
+  }
+
+  async function resetRunAndSNES() {
+    await resetSNES();
+  }
+
+  function handleRemoteCommand(cmd) {
+    const cmdType = cmd.type;
+    const cmdId = cmd.command_id;
+    wtLog(`Remote command: ${cmdType}`, "info");
+
+    let success = true;
+    let error = null;
+
+    try {
+      if (cmdType === "reset_run") {
+        resetRun();
+      } else if (cmdType === "snes_reset") {
+        resetSNES();
+      } else if (cmdType === "stop_run") {
+        stopTracker();
+      } else {
+        success = false;
+        error = `Unknown command: ${cmdType}`;
+      }
+    } catch (e) {
+      success = false;
+      error = String(e);
+    }
+
+    // Report result back to the server
+    if (cmdId) {
+      fetch(`/live/command-result/${USER_ID}/${cmdId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ success, error }),
+      }).catch(() => {});
+    }
   }
   </script>
 </body>
