@@ -661,3 +661,46 @@ async def get_command_result(request: Request, user_id: str, command_id: str):
     if result is None:
         return {"ok": True, "pending": True}
     return {"ok": True, "pending": False, "result": result}
+
+
+@router.post("/admin/cleanup-menu-games")
+async def cleanup_menu_games(request: Request):
+    """Remove all m3nu/menu game data from DB. Requires admin API key."""
+    if not _check_api_key(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    from core import db
+    menu_patterns = ['m3nu', 'menu', 'Menu', 'm3nu.bin', 'menu.bin']
+
+    deleted = {}
+    for table, col in [
+        ("game_events", "game_name"),
+        ("level_splits", "game_name"),
+        ("progress_snapshots", "game_name"),
+    ]:
+        try:
+            for p in menu_patterns:
+                db.execute(f"DELETE FROM {table} WHERE {col} = ?", (p,))
+                db.execute(f"DELETE FROM {table} WHERE {col} ILIKE ?", (f"%{p}%",))
+        except Exception:
+            pass
+
+    # run_levels via run_definitions
+    try:
+        for p in menu_patterns:
+            db.execute("DELETE FROM run_levels WHERE run_definition_id IN (SELECT id FROM run_definitions WHERE game_name = ?)", (p,))
+            db.execute("DELETE FROM run_levels WHERE run_definition_id IN (SELECT id FROM run_definitions WHERE game_name ILIKE ?)", (f"%{p}%",))
+    except Exception:
+        pass
+
+    for table in ["run_definitions", "game_levels", "sessions", "game_metadata"]:
+        try:
+            col = "rom_name" if table == "game_metadata" else "game_name"
+            for p in menu_patterns:
+                db.execute(f"DELETE FROM {table} WHERE {col} = ?", (p,))
+                db.execute(f"DELETE FROM {table} WHERE {col} ILIKE ?", (f"%{p}%",))
+        except Exception:
+            pass
+
+    db.commit()
+    return {"ok": True, "message": "Menu game data cleaned up"}
